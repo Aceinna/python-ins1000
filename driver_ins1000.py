@@ -40,6 +40,7 @@ class GrabRoverData:
         '''
         self.port = ""
         self.baud = 0
+        self.close_serial_port()
         if not self.data_queue.empty():
             self.data_queue.get()
         self.exit_thread = False
@@ -50,6 +51,13 @@ class GrabRoverData:
             return when occur SerialException
         '''
         while True:
+            self.exit_lock.acquire()
+            if self.exit_thread:
+                self.exit_lock.release()
+                self.close_serial_port()
+                return
+            self.exit_lock.release()
+
             try:
                 serial_data = bytearray(self.ser.read(100))
             except serial.SerialException:
@@ -107,13 +115,15 @@ class GrabRoverData:
                         if result[0] == frame[-2] and result[1] == frame[-1]:
                             # find a whole frame
                             if 0X01 == frame[MSG_SUB_ID_IDX]:
-                                self.handle_msg_01(frame)  # Kalman Filter Navigation Message
+                                self.handle_msg_01(frame)  # Handle Kalman Filter Navigation Message
                             elif 0X02 == frame[MSG_SUB_ID_IDX]:
-                                self.handle_msg_02(frame)  # Satellite Signal Strength
+                                self.handle_msg_02(frame)  # Handle Satellite Signal Strength
                             elif 0X03 == frame[MSG_SUB_ID_IDX]:
-                                self.handle_msg_03(frame)  # SV Visibility
+                                self.handle_msg_03(frame)  # Handle SV Visibility
                             elif 0X04 == frame[MSG_SUB_ID_IDX]:
-                                self.handle_msg_04(frame)  # Install Parameters
+                                self.handle_msg_04(frame)  # Handle Install Parameters
+                            elif 0X0A == frame[MSG_SUB_ID_IDX]:
+                                self.handle_msg_0A(frame)  # Handle Repackaged GSV Message
                         else:
                             print("Checksum error!")
                     else:
@@ -127,6 +137,27 @@ class GrabRoverData:
                         header_tp = []
                         find_header = True
 
+    def handleKeyboardInterrupt(self):
+        ''' handle KeyboardInterrupt.
+            returns: True when occur KeyboardInterrupt.
+                     False when receiver and parser threads exit.
+        '''
+        while True:
+            self.exit_lock.acquire()
+            if self.exit_thread:
+                self.exit_lock.release()
+                return False  # return when receiver and parser threads exit
+            self.exit_lock.release()
+
+            try:
+                time.sleep(0.1)
+            except (OSError, KeyboardInterrupt):  # response for KeyboardInterrupt such as Ctrl+C
+                self.exit_lock.acquire()
+                self.exit_thread = True  # Notice thread receiver and paser to exit.
+                self.exit_lock.release()
+                print('User stop this program by KeyboardInterrupt! File:[{0}], Line:[{1}]'.format(__file__, sys._getframe().f_lineno))
+                return True
+
     def open_serial_port(self):
         ''' open serial port
             :returns: true when successful
@@ -138,23 +169,37 @@ class GrabRoverData:
             print(serial.SerialException)
             return False
 
+    def close_serial_port(self):
+        '''close serial port
+        '''
+        if self.ser is not None:
+            if self.ser.isOpen():
+                self.ser.close()
+
     def start_log(self):
         ''' start two threads: receiver and parser.
+            returns False when user trigger KeyboardInterrupt to stop this program.
+            otherwise returns True.
         '''
         if not self.open_serial_port():
-            return
+            return True
 
         funcs = [self.receiver, self.parser]
         for i in range(len(funcs)):
             t = threading.Thread(target=funcs[i], args=())
             t.start()
+            print("Thread[{0}({1})] started.".format(t.name, t.ident))
             self.threads.append(t)
+
+        if self.handleKeyboardInterrupt():
+            return False
 
         for i in range(len(self.threads)):
             self.threads[i].join()
+            print("Thread[{0}({1})] stoped.".format(self.threads[i].name, self.threads[i].ident))
 
-        if self.ser is not None:
-            self.ser.close()
+        self.close_serial_port()
+        return True
 
     def find_device(self):
         ''' Finds active ports and then autobauds units, repeats every 0.1 seconds
@@ -199,10 +244,11 @@ class GrabRoverData:
            :returns:
                 true when successful
         '''
+        s = None
         for port in ports:
             for baud in [230400, 115200]:
                 try:
-                    s = serial.Serial(port, baud, timeout=2)  # Assume we can grab at least one whole frame in 2 secondss.
+                    s = serial.Serial(port, baud, timeout=1)  # Assume at least one whole frame can be grabed in 1 seconds.
                     serial_data = bytearray(s.read(300))  # Assume max_len of a frame is less than 300 bytes.
                     s.close()
                     if serial_data.find((b'\xAF\x20\x05')) > -1:  # if find the header "0XAF 0X20 0X05"
@@ -279,14 +325,23 @@ class GrabRoverData:
     def handle_msg_04(self, data):
         pass
 
+    def handle_msg_0A(self, data):
+        print('{0}:Repackaged GSV Message'.format(datetime.datetime.now().strftime('%Y%m%d_%H_%M_%S')))
+
 
 def main():
     '''main'''
     grab = GrabRoverData()
     while True:
-        grab.reinit()
-        grab.find_device()
-        grab.start_log()
+        try:
+            grab.reinit()
+            grab.find_device()
+        except (OSError, KeyboardInterrupt):  # response for KeyboardInterrupt such as Ctrl+C
+            print('User stop this program by KeyboardInterrupt! File:[{0}], Line:[{1}]'.format(__file__, sys._getframe().f_lineno))
+            break
+
+        if not grab.start_log():
+            break
 
 
 if __name__ == '__main__':
