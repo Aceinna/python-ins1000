@@ -7,12 +7,16 @@ Created on 2018-07-01
 """
 
 import sys
+import os
 import threading
 import datetime
 import time
 import operator
 import struct
 import glob
+import math
+import json
+import collections
 import serial
 try:
     from queue import Queue  # python3
@@ -82,7 +86,7 @@ class GrabRoverData:
         PAYLOAD_LEN_IDX = 4
         MSG_SUB_ID_IDX = 3
 
-        header_tp = []
+        sync_pattern = collections.deque(3*[0], 3)
         find_header = False
         frame = []
         payload_len = 0
@@ -111,7 +115,7 @@ class GrabRoverData:
                     elif 6 + payload_len + 2 == len(frame):  # 6: len of header; 2:len of checksum.
                         find_header = False
                         # checksum
-                        result = self.checksum(frame[PAYLOAD_LEN_IDX + 2:PAYLOAD_LEN_IDX + payload_len + 2])
+                        result = self.check_sum(frame[PAYLOAD_LEN_IDX + 2:PAYLOAD_LEN_IDX + payload_len + 2])
                         if result[0] == frame[-2] and result[1] == frame[-1]:
                             # find a whole frame
                             if 0X01 == frame[MSG_SUB_ID_IDX]:
@@ -129,15 +133,12 @@ class GrabRoverData:
                     else:
                         pass
                 else:  # if haven't found header [0XAF, 0X20, 0X05].
-                    if len(header_tp) >= 3:
-                        del header_tp[0]
-                    header_tp.append(data)
-                    if operator.eq(header_tp, HEADER):
-                        frame = header_tp[:]  # header_tp.copy()
-                        header_tp = []
+                    sync_pattern.append(data)
+                    if operator.eq(list(sync_pattern), HEADER):
+                        frame = HEADER[:]  # header_tp.copy()
                         find_header = True
 
-    def handleKeyboardInterrupt(self):
+    def handle_KeyboardInterrupt(self):
         ''' handle KeyboardInterrupt.
             returns: True when occur KeyboardInterrupt.
                      False when receiver and parser threads exit.
@@ -151,23 +152,22 @@ class GrabRoverData:
 
             try:
                 time.sleep(0.1)
-            except (OSError, KeyboardInterrupt):  # response for KeyboardInterrupt such as Ctrl+C
+            except KeyboardInterrupt:  # response for KeyboardInterrupt such as Ctrl+C
                 self.exit_lock.acquire()
                 self.exit_thread = True  # Notice thread receiver and paser to exit.
                 self.exit_lock.release()
                 print('User stop this program by KeyboardInterrupt! File:[{0}], Line:[{1}]'.format(__file__, sys._getframe().f_lineno))
                 return True
 
-    def open_serial_port(self):
+    def open_serial_port(self, port=False, baud=115200, timeout=0.1):
         ''' open serial port
-            :returns: true when successful
+            returns: true when successful
         '''
         try:
-            self.ser = serial.Serial(self.port, self.baud, timeout=0.1)
-            return True
-        except (OSError, serial.SerialException):
-            print(serial.SerialException)
-            return False
+            self.ser = serial.Serial(port, baud, timeout=timeout)
+        except Exception as e:
+            print('serial port open exception, port:{0} baud:{1} timeout:{2}'.format(port, baud, timeout) )
+            self.ser = None
 
     def close_serial_port(self):
         '''close serial port
@@ -181,7 +181,8 @@ class GrabRoverData:
             returns False when user trigger KeyboardInterrupt to stop this program.
             otherwise returns True.
         '''
-        if not self.open_serial_port():
+        self.open_serial_port(self.port, self.baud, 0.1)
+        if not self.ser:
             return True
 
         funcs = [self.receiver, self.parser]
@@ -191,7 +192,7 @@ class GrabRoverData:
             print("Thread[{0}({1})] started.".format(t.name, t.ident))
             self.threads.append(t)
 
-        if self.handleKeyboardInterrupt():
+        if self.handle_KeyboardInterrupt():
             return False
 
         for i in range(len(self.threads)):
@@ -202,10 +203,16 @@ class GrabRoverData:
         return True
 
     def find_device(self):
-        ''' Finds active ports and then autobauds units, repeats every 0.1 seconds
+        ''' Finds active ports and then autobauds units
         '''
-        while not self.autobaud(self.find_ports()):
-            time.sleep(0.1)
+        if self.try_last_port():
+            return True
+        else:
+            while not self.autobaud(self.find_ports()):
+                time.sleep(0.1)
+        return True
+        # while not self.autobaud(self.find_ports()):
+        #     time.sleep(0.1)
 
     def find_ports(self):
         ''' Lists serial port names. Code from
@@ -244,24 +251,62 @@ class GrabRoverData:
            :returns:
                 true when successful
         '''
-        s = None
         for port in ports:
             for baud in [230400, 115200]:
-                try:
-                    s = serial.Serial(port, baud, timeout=1)  # Assume at least one whole frame can be grabed in 1 seconds.
-                    serial_data = bytearray(s.read(300))  # Assume max_len of a frame is less than 300 bytes.
-                    s.close()
-                    if serial_data.find((b'\xAF\x20\x05')) > -1:  # if find the header "0XAF 0X20 0X05"
+                self.open_serial_port(port, baud, 1.0)  # Assume at least one whole frame can be grabed in 1 seconds.
+                if self.ser:
+                    serial_data = bytearray(self.ser.read(300))  # Assume max_len of a frame is less than 300 bytes.
+                    self.ser.close()
+                    if self.find_header(serial_data):
                         self.port = port
                         self.baud = baud
                         print('Connected: {0}  {1}'.format(self.port, self.baud))
+                        self.save_last_port()
                         return True
-                except (OSError, serial.SerialException):
-                    if s is not None:
-                        s.close()
         return False
 
-    def checksum(self, data):
+    def try_last_port(self):
+        connection = None
+        try:
+            with open(os.path.join(os.getcwd(), r'setting\connection.json')) as json_data:
+                connection = json.load(json_data)
+            if connection:
+                self.open_serial_port(port=connection['port'], baud=connection['baud'], timeout=1)
+                if self.ser:
+                    serial_data = bytearray(self.ser.read(300))  # Assume max_len of a frame is less than 300 bytes.
+                    self.ser.close()
+                    if self.find_header(serial_data):
+                        self.port = connection['port']
+                        self.baud = connection['baud']
+                        print('Connected: {0}  {1}'.format(self.port, self.baud))
+                        return True
+                    else:
+                        return False
+                else:
+                    return False
+        except:
+            return False
+
+    def save_last_port(self):
+        setting_folder = os.path.join(os.getcwd(), r'setting')
+        connection_name = 'connection.json'
+        connection_file = os.path.join(setting_folder, connection_name)
+        if not os.path.exists(setting_folder):
+            try:
+                os.mkdir(setting_folder)
+            except:
+                return
+
+        connection = {"port" : self.ser.port, "baud" : self.ser.baudrate }
+        with open(connection_file, 'w') as outfile:
+            json.dump(connection, outfile)
+
+    def find_header(self, data):
+        if data.find((b'\xAF\x20\x05')) > -1:  # if find the header "0XAF 0X20 0X05"
+            return True
+        return False
+
+    def check_sum(self, data):
         ''' Calculate the checksum
         '''
         checksum_a = checksum_b = 0
@@ -276,11 +321,10 @@ class GrabRoverData:
     def handle_msg_01(self, data):
         '''Kalman Filter Navigation Message
         '''
-        pi = 3.14159265
         system_time = struct.unpack('<d', struct.pack('8B', *(data[6:14])))[0]
         GPS_time = struct.unpack('<d', struct.pack('8B', *(data[14:22])))[0]
-        latitude = (struct.unpack('<d', struct.pack('8B', *(data[22:30])))[0]) * 180/pi
-        longitude = struct.unpack('<d', struct.pack('8B', *(data[30:38])))[0] * 180/pi
+        latitude = (struct.unpack('<d', struct.pack('8B', *(data[22:30])))[0]) * 180/math.pi
+        longitude = struct.unpack('<d', struct.pack('8B', *(data[30:38])))[0] * 180/math.pi
         ellipsoidal_height = struct.unpack('<d', struct.pack('8B', *(data[38:46])))[0]
         velocity_north = struct.unpack('<d', struct.pack('8B', *(data[46:54])))[0]
         velocity_east = struct.unpack('<d', struct.pack('8B', *(data[54:62])))[0]
@@ -336,10 +380,9 @@ def main():
         try:
             grab.reinit()
             grab.find_device()
-        except (OSError, KeyboardInterrupt):  # response for KeyboardInterrupt such as Ctrl+C
+        except KeyboardInterrupt:  # response for KeyboardInterrupt such as Ctrl+C
             print('User stop this program by KeyboardInterrupt! File:[{0}], Line:[{1}]'.format(__file__, sys._getframe().f_lineno))
             break
-
         if not grab.start_log():
             break
 
