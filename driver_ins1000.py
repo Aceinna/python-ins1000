@@ -24,7 +24,7 @@ except ImportError:
     from Queue import Queue  # python2
 
 
-class GrabRoverData:
+class RoverDriver:
     def __init__(self):
         ''' initialization
         '''
@@ -36,8 +36,12 @@ class GrabRoverData:
         self.exit_thread = False  # flag of exit threads
         self.exit_lock = threading.Lock()  # lock of exit_thread
         self.data_lock = threading.Lock()  # lock of data_queue
+        self.setting_folder = os.path.join(os.getcwd(), r'setting')  # use to store some configuration files.
+        self.connection_file = os.path.join(self.setting_folder, 'connection.json')
+        self.rover_file = os.path.join(self.setting_folder, 'rover.json')
+        if not self.load_configuration():
+            os._exit(1)
         print('Program start at:{0}'.format(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')))
-        self.framenum = 0
 
     def reinit(self):
         ''' re-init parameters when occur SerialException.
@@ -119,6 +123,8 @@ class GrabRoverData:
                         if result[0] == frame[-2] and result[1] == frame[-1]:
                             # find a whole frame
                             if 0X01 == frame[MSG_SUB_ID_IDX]:
+                                self.set_packet_type('KFN')
+                                self.handle_msg_01_(frame) # just for verify, will be deleted in future.
                                 self.handle_msg_01(frame)  # Handle Kalman Filter Navigation Message
                             elif 0X02 == frame[MSG_SUB_ID_IDX]:
                                 self.handle_msg_02(frame)  # Handle Satellite Signal Strength
@@ -266,9 +272,14 @@ class GrabRoverData:
         return False
 
     def try_last_port(self):
+        '''try to open serial port based on the port and baud read from connection.json.
+           try to find frame header in serial data.
+           returns: True if find header
+                    False if not find header.
+        '''
         connection = None
         try:
-            with open(os.path.join(os.getcwd(), r'setting\connection.json')) as json_data:
+            with open(self.connection_file) as json_data:
                 connection = json.load(json_data)
             if connection:
                 self.open_serial_port(port=connection['port'], baud=connection['baud'], timeout=1)
@@ -288,18 +299,33 @@ class GrabRoverData:
             return False
 
     def save_last_port(self):
-        setting_folder = os.path.join(os.getcwd(), r'setting')
-        connection_name = 'connection.json'
-        connection_file = os.path.join(setting_folder, connection_name)
-        if not os.path.exists(setting_folder):
+        if not os.path.exists(self.setting_folder):
             try:
-                os.mkdir(setting_folder)
+                os.mkdir(self.setting_folder)
             except:
                 return
 
         connection = {"port" : self.ser.port, "baud" : self.ser.baudrate }
-        with open(connection_file, 'w') as outfile:
-            json.dump(connection, outfile)
+        try:
+            with open(self.connection_file, 'w') as outfile:
+                json.dump(connection, outfile)
+        except:
+            pass
+
+    def load_configuration(self):
+        '''
+        load properties from 'rover.json'
+        returns: True when load successfully.
+                 False when load failed.
+        '''
+        try:
+            with open(self.rover_file) as json_data:
+                self.rover_properties = json.load(json_data)
+            return True
+        # except (ValueError, KeyError, TypeError) as error:
+        except Exception as e:
+            print(e)
+            return False
 
     def find_header(self, data):
         if data.find((b'\xAF\x20\x05')) > -1:  # if find the header "0XAF 0X20 0X05"
@@ -318,26 +344,117 @@ class GrabRoverData:
         checksum_b %= 256
         return checksum_a, checksum_b
 
-    def handle_msg_01(self, data):
+    def get_packet_type(self):
+        return self.packet_type
+
+    def set_packet_type(self, packet_type):  #consider add lock when other thread invoke this function.
+        self.packet_type = packet_type
+
+    def parse_frame(self, frame):
+        '''Parses packet payload using rover.json as reference
+        '''
+        PAYLOAD_LEN_IDX = 4
+        payload_len = 256 * frame[PAYLOAD_LEN_IDX + 1] + frame[PAYLOAD_LEN_IDX]
+        payload = frame[6:payload_len+6]   # extract the payload
+        data = [] 
+
+        # Find the packet in the imu_properties from unit's JSON description
+        output_packet = next((x for x in self.rover_properties['userMessages']['outputPackets'] if x['name'] == self.packet_type), None)
+        input_packet = next((x for x in self.rover_properties['userMessages']['inputPackets'] if x['name'] == self.packet_type), None)
+
+        if output_packet:
+            self.data = self.unpack_output_packet(output_packet, payload)
+            self.change_scale(output_packet, self.data)
+        elif input_packet:
+            data = self.unpack_input_packet(input_packet['responsePayload'], payload) 
+        return data
+
+    def unpack_output_packet(self, output_message, payload):
+        length = 0
+        pack_fmt = '<'
+        for value in output_message['payload']:
+            if value['type'] == 'float':
+                pack_fmt += 'f'
+                length += 4
+            elif value['type'] == 'uint32':
+                pack_fmt += 'I'
+                length += 4
+            elif value['type'] == 'int32':
+                pack_fmt += 'i'
+                length += 4
+            elif value['type'] == 'int16':
+                pack_fmt += 'h'
+                length += 2
+            elif value['type'] == 'uint16':
+                pack_fmt += 'H'
+                length += 2
+            elif value['type'] == 'double':
+                pack_fmt += 'd'
+                length += 8
+            elif value['type'] == 'int64':
+                pack_fmt += 'q'
+                length += 8
+            elif value['type'] == 'uint64':
+                pack_fmt += 'Q'
+                length += 8
+            elif value['type'] == 'char':
+                pack_fmt += 'c'
+                length += 1
+            elif value['type'] == 'uchar':
+                pack_fmt += 'B'
+                length += 1
+            elif value['type'] == 'uint8':
+                pack_fmt += 'B'
+                length += 1
+        len_fmt = '{0}B'.format(length)
+        b = struct.pack(len_fmt, *payload)
+        data = struct.unpack(pack_fmt, b)
+        out = [(value['name'], data[idx]) for idx, value in enumerate(output_message['payload'])]
+        data = collections.OrderedDict(out)
+        return data
+
+    def change_scale(self, output_message, data):
+        '''change scaling if fild with a "Scaling" attribute.
+            For example, unit of Latitude in payload is radian, but we are used to deg, so it's necessary to change scaling from radian to deg.
+            returns: False when some fild changed failed, should check the rover.json.
+                     True when successful.
+        '''
+        for value in output_message['payload']:
+            try:
+                Scaling = value['Scaling']
+            except KeyError:  # if there is no 'Scaling' key.
+                continue
+
+            try:
+                data[value['name']] = data[value['name']] * eval(Scaling)
+            except Exception as e:  # value['name']  or Scaling is incorrect.
+                print(e)
+                return False
+        return True
+
+    def handle_msg_01(self, frame):
+        self.parse_frame(frame)
+
+    def handle_msg_01_(self, frame):
         '''Kalman Filter Navigation Message
         '''
-        system_time = struct.unpack('<d', struct.pack('8B', *(data[6:14])))[0]
-        GPS_time = struct.unpack('<d', struct.pack('8B', *(data[14:22])))[0]
-        latitude = (struct.unpack('<d', struct.pack('8B', *(data[22:30])))[0]) * 180/math.pi
-        longitude = struct.unpack('<d', struct.pack('8B', *(data[30:38])))[0] * 180/math.pi
-        ellipsoidal_height = struct.unpack('<d', struct.pack('8B', *(data[38:46])))[0]
-        velocity_north = struct.unpack('<d', struct.pack('8B', *(data[46:54])))[0]
-        velocity_east = struct.unpack('<d', struct.pack('8B', *(data[54:62])))[0]
-        velocity_down = struct.unpack('<d', struct.pack('8B', *(data[62:70])))[0]
-        roll = struct.unpack('<d', struct.pack('8B', *(data[70:78])))[0]
-        pitch = struct.unpack('<d', struct.pack('8B', *(data[78:86])))[0]
-        heading = struct.unpack('<d', struct.pack('8B', *(data[86:94])))[0]
-        position_mode = data[94]
-        velocity_mode = data[95]
-        attitude_status = data[96]
-
+        system_time = struct.unpack('<d', struct.pack('8B', *(frame[6:14])))[0]
+        GPS_time = struct.unpack('<d', struct.pack('8B', *(frame[14:22])))[0]
+        latitude = (struct.unpack('<d', struct.pack('8B', *(frame[22:30])))[0]) * 180/math.pi
+        longitude = struct.unpack('<d', struct.pack('8B', *(frame[30:38])))[0] * 180/math.pi
+        ellipsoidal_height = struct.unpack('<d', struct.pack('8B', *(frame[38:46])))[0]
+        velocity_north = struct.unpack('<d', struct.pack('8B', *(frame[46:54])))[0]
+        velocity_east = struct.unpack('<d', struct.pack('8B', *(frame[54:62])))[0]
+        velocity_down = struct.unpack('<d', struct.pack('8B', *(frame[62:70])))[0]
+        roll = struct.unpack('<d', struct.pack('8B', *(frame[70:78])))[0]
+        pitch = struct.unpack('<d', struct.pack('8B', *(frame[78:86])))[0]
+        heading = struct.unpack('<d', struct.pack('8B', *(frame[86:94])))[0]
+        position_mode = frame[94]
+        velocity_mode = frame[95]
+        attitude_status = frame[96]
+        print('\r\n{0} Kalman Filter Navigation Message:'.format(datetime.datetime.now().strftime('%Y%m%d_%H_%M_%S')))
         # print msg
-        print('\r\nKalman Filter Navigation Message:\r\n system_time:{0} GPS_time: {1} latitude: {2} longitude: {3} ellipsoidal_height: {4} \
+        print('system_time:{0} GPS_time: {1} latitude: {2} longitude: {3} ellipsoidal_height: {4} \
         velocity_north:{5} velocity_east:{6} velocity_down:{7} roll:{8} \
         pitch:{9} heading:{10} position_mode:{11} velocity_down:{12} attitude_status:{13}'
         .format(system_time, GPS_time, latitude, longitude, ellipsoidal_height,
@@ -375,15 +492,15 @@ class GrabRoverData:
 
 def main():
     '''main'''
-    grab = GrabRoverData()
+    driver = RoverDriver()
     while True:
         try:
-            grab.reinit()
-            grab.find_device()
+            driver.reinit()
+            driver.find_device()
         except KeyboardInterrupt:  # response for KeyboardInterrupt such as Ctrl+C
             print('User stop this program by KeyboardInterrupt! File:[{0}], Line:[{1}]'.format(__file__, sys._getframe().f_lineno))
             break
-        if not grab.start_log():
+        if not driver.start_log():
             break
 
 
