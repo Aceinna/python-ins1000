@@ -3,12 +3,13 @@
     "type" : "Rover",
     "description" : "Rover",
     "userConfiguration" : [],
-    "userMessages" : 
+    "userMessages" :
 	{ 
          "inputPackets" : [],
          "outputPackets" : [
             {
                 "name": "KFN",
+                "header": "AF200501",
                 "description": "Kalman Filter Navigation Message",	
                 "payload" : [
                     {
@@ -89,25 +90,176 @@
                 ],
                 "graphs" : [
                     { 
-                        "name" : "Acceleration",
-                        "units" : "m/s/s",
-                        "xAxis" : "Time (s)",
-                        "yAxes" : [ "xAccel", "yAccel", "zAccel"],
+                    },
+                    {
+                    }
+                ]
+            },
+            {
+                "name": "CNM",
+                "header": "AF20050D",
+                "description": "Compact Navigation Message (High Rate)",	
+                "payload" : [
+                    {
+                        "type" : "double",
+                        "name" : "System time",
+                        "unit" : "s"
+                    },
+                    {
+                        "type" : "double",
+                        "name" : "Latitude",
+                        "unit" : "deg"
+                    },
+                    {
+                        "type" : "double",
+                        "name" : "Longitude",
+                        "unit" : "deg"
+                    },
+                    {
+                        "type" : "float",
+                        "name" : "Ellipsoidal height",
+                        "unit" : "m"
+                    },
+                    {
+                        "type" : "float",
+                        "name" : "Velocity_N",
+                        "unit" : "m/s"
+                    },
+                    {
+                        "type" : "float",
+                        "name" : "Velocity_E",
+                        "unit" : "m/s"
+                    },
+                    {
+                        "type" : "float",
+                        "name" : "Velocity_D",
+                        "unit" : "m/s"
+                    },
+                    {
+                        "type" : "float",
+                        "name" : "Attitude quaternion-Scalar",
+                        "unit" : ""
+                    },
+                    {
+                        "type" : "float",
+                        "name" : "Attitude quaternion-X",
+                        "unit" : ""
+                    },
+                    {
+                        "type" : "float",
+                        "name" : "Attitude quaternion-Y",
+                        "unit" : ""
+                    },
+                    {
+                        "type" : "float",
+                        "name" : "Attitude quaternion-Z",
+                        "unit" : ""
+                    },
+                    {
+                        "type" : "float",
+                        "name" : "Accel in body frame-X",
+                        "unit" : "m/s^2"
+                    },
+                    {
+                        "type" : "float",
+                        "name" : "Accel in body frame-Y",
+                        "unit" : "m/s^2"
+                    },
+                    {
+                        "type" : "float",
+                        "name" : "Accel in body frame-Z",
+                        "unit" : "m/s^2"
+                    },
+                    {
+                        "type" : "float",
+                        "name" : "Gyro in body frame-X",
+                        "unit" : "deg/s"
+                    },
+                    {
+                        "type" : "float",
+                        "name" : "Gyro in body frame-Y",
+                        "unit" : "deg/s"
+                    },
+                    {
+                        "type" : "float",
+                        "name" : "Gyro in body frame-Z",
+                        "unit" : "deg/s"
+                    },
+                    {
+                        "type" : "float",
+                        "name" : "Position RMS-N",
+                        "unit" : "m"
+                    },
+                    {
+                        "type" : "float",
+                        "name" : "Position RMS-E",
+                        "unit" : "m"
+                    },
+                    {
+                        "type" : "float",
+                        "name" : "Position RMS-D",
+                        "unit" : "m"
+                    },
+                    {
+                        "type" : "float",
+                        "name" : "Velocity RMS-N",
+                        "unit" : "m/s"
+                    },
+                    {
+                        "type" : "float",
+                        "name" : "Velocity RMS-E",
+                        "unit" : "m/s"
+                    },
+                    {
+                        "type" : "float",
+                        "name" : "Velocity RMS-D",
+                        "unit" : "m/s"
+                    },
+                    {
+                        "type" : "float",
+                        "name" : "Attitude RMS-N",
+                        "unit" : "deg"
+                    },
+                    {
+                        "type" : "float",
+                        "name" : "Attitude RMS-E",
+                        "unit" : "deg"
+                    },
+                    {
+                        "type" : "float",
+                        "name" : "Attitude RMS-D",
+                        "unit" : "deg"
+                    },
+                    {
+                        "type" : "uint16",
+                        "name" : "GPS week number",
+                        "unit" : ""
+                    },
+                    {
+                        "type" : "uint8",
+                        "name" : "Alignment status",
+                        "unit" : ""
+                    }
+                ],
+                "graphs" : [
+                    { 
+                        "name" : "Position",
+                        "units" : "m",
+                        "xAxis" : "m",
+                        "yAxes" : [ "N", "E", "D"],
                         "colors" : [ "#FF0000", "#00FF00", "#0000FF" ],
                         "yMax" : 80
                     },
                     {
-                        "name" : "Angular Rate",
-                        "units" : "deg/s",
-                        "xAxis" : "Time (s)",
-                        "yAxes" : [ "xRate", "yRate", "zRate"],
+                        "name" : "Attitude",
+                        "units" : "deg",
+                        "xAxis" : "deg",
+                        "yAxes" : [ "N", "E", "D"],
                         "colors" : [ "#FF0000", "#00FF00", "#0000FF" ],
-                        "yMax" : 400
+                        "yMax" : 360
                     }
                 ]
-            },
-			{
-			}
+            }
         ] 
     }
 }

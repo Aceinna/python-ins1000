@@ -53,6 +53,10 @@ class RoverDriver:
             self.data_queue.get()
         self.exit_thread = False
         self.threads = []  # clear threads
+        self.app.on_reinit()
+
+    def set_app(self, app):
+        self.app = app
 
     def receiver(self):
         ''' receive serial data and push data into data_queue.
@@ -122,18 +126,7 @@ class RoverDriver:
                         result = self.check_sum(frame[PAYLOAD_LEN_IDX + 2:PAYLOAD_LEN_IDX + payload_len + 2])
                         if result[0] == frame[-2] and result[1] == frame[-1]:
                             # find a whole frame
-                            if 0X01 == frame[MSG_SUB_ID_IDX]:
-                                self.set_packet_type('KFN')
-                                self.handle_msg_01_(frame) # just for verify, will be deleted in future.
-                                self.handle_msg_01(frame)  # Handle Kalman Filter Navigation Message
-                            elif 0X02 == frame[MSG_SUB_ID_IDX]:
-                                self.handle_msg_02(frame)  # Handle Satellite Signal Strength
-                            elif 0X03 == frame[MSG_SUB_ID_IDX]:
-                                self.handle_msg_03(frame)  # Handle SV Visibility
-                            elif 0X04 == frame[MSG_SUB_ID_IDX]:
-                                self.handle_msg_04(frame)  # Handle Install Parameters
-                            elif 0X0A == frame[MSG_SUB_ID_IDX]:
-                                self.handle_msg_0A(frame)  # Handle Repackaged GSV Message
+                            self.parse_frame(frame)
                         else:
                             print("Checksum error!")
                     else:
@@ -182,7 +175,7 @@ class RoverDriver:
             if self.ser.isOpen():
                 self.ser.close()
 
-    def start_log(self):
+    def start_collection(self):
         ''' start two threads: receiver and parser.
             returns False when user trigger KeyboardInterrupt to stop this program.
             otherwise returns True.
@@ -212,13 +205,13 @@ class RoverDriver:
         ''' Finds active ports and then autobauds units
         '''
         if self.try_last_port():
-            return True
+            pass
         else:
             while not self.autobaud(self.find_ports()):
                 time.sleep(0.1)
+
+        self.app.on_find_active_rover()
         return True
-        # while not self.autobaud(self.find_ports()):
-        #     time.sleep(0.1)
 
     def find_ports(self):
         ''' Lists serial port names. Code from
@@ -347,7 +340,7 @@ class RoverDriver:
     def get_packet_type(self):
         return self.packet_type
 
-    def set_packet_type(self, packet_type):  #consider add lock when other thread invoke this function.
+    def set_packet_type(self, packet_type):  # consider add lock when other thread invoke this function.
         self.packet_type = packet_type
 
     def parse_frame(self, frame):
@@ -356,15 +349,17 @@ class RoverDriver:
         PAYLOAD_LEN_IDX = 4
         payload_len = 256 * frame[PAYLOAD_LEN_IDX + 1] + frame[PAYLOAD_LEN_IDX]
         payload = frame[6:payload_len+6]   # extract the payload
-        data = [] 
+        header = ''.join(["%02X" % x for x in frame[0:PAYLOAD_LEN_IDX]]).strip()
+        data = []
 
         # Find the packet in the imu_properties from unit's JSON description
-        output_packet = next((x for x in self.rover_properties['userMessages']['outputPackets'] if x['name'] == self.packet_type), None)
-        input_packet = next((x for x in self.rover_properties['userMessages']['inputPackets'] if x['name'] == self.packet_type), None)
+        output_packet = next((x for x in self.rover_properties['userMessages']['outputPackets'] if x['header'] == header), None)
+        input_packet = next((x for x in self.rover_properties['userMessages']['inputPackets'] if x['header'] == header), None)
 
         if output_packet:
-            self.data = self.unpack_output_packet(output_packet, payload)
-            self.change_scale(output_packet, self.data)
+            data = self.unpack_output_packet(output_packet, payload)
+            self.change_scale(output_packet, data)
+            self.app.on_message(output_packet['name'], data)
         elif input_packet:
             data = self.unpack_input_packet(input_packet['responsePayload'], payload) 
         return data
@@ -432,77 +427,6 @@ class RoverDriver:
                 return False
         return True
 
-    def handle_msg_01(self, frame):
-        self.parse_frame(frame)
-
-    def handle_msg_01_(self, frame):
-        '''Kalman Filter Navigation Message
-        '''
-        system_time = struct.unpack('<d', struct.pack('8B', *(frame[6:14])))[0]
-        GPS_time = struct.unpack('<d', struct.pack('8B', *(frame[14:22])))[0]
-        latitude = (struct.unpack('<d', struct.pack('8B', *(frame[22:30])))[0]) * 180/math.pi
-        longitude = struct.unpack('<d', struct.pack('8B', *(frame[30:38])))[0] * 180/math.pi
-        ellipsoidal_height = struct.unpack('<d', struct.pack('8B', *(frame[38:46])))[0]
-        velocity_north = struct.unpack('<d', struct.pack('8B', *(frame[46:54])))[0]
-        velocity_east = struct.unpack('<d', struct.pack('8B', *(frame[54:62])))[0]
-        velocity_down = struct.unpack('<d', struct.pack('8B', *(frame[62:70])))[0]
-        roll = struct.unpack('<d', struct.pack('8B', *(frame[70:78])))[0]
-        pitch = struct.unpack('<d', struct.pack('8B', *(frame[78:86])))[0]
-        heading = struct.unpack('<d', struct.pack('8B', *(frame[86:94])))[0]
-        position_mode = frame[94]
-        velocity_mode = frame[95]
-        attitude_status = frame[96]
-        print('\r\n{0} Kalman Filter Navigation Message:'.format(datetime.datetime.now().strftime('%Y%m%d_%H_%M_%S')))
-        # print msg
-        print('system_time:{0} GPS_time: {1} latitude: {2} longitude: {3} ellipsoidal_height: {4} \
-        velocity_north:{5} velocity_east:{6} velocity_down:{7} roll:{8} \
-        pitch:{9} heading:{10} position_mode:{11} velocity_down:{12} attitude_status:{13}'
-        .format(system_time, GPS_time, latitude, longitude, ellipsoidal_height,
-        velocity_north, velocity_east, velocity_down, roll, pitch,
-        heading, position_mode, velocity_mode, attitude_status))
-
-    def handle_msg_02(self, data):
-        '''Satellite Signal Strength
-        '''
-        system_time = struct.unpack('<d', struct.pack('8B', *(data[6:14])))[0]
-        GPS_time = struct.unpack('<d', struct.pack('8B', *(data[14:22])))[0]
-        receiver_id = data[22]
-        antenna_id = data[23]
-        nsv_idx = 24
-        n_sv = data[nsv_idx]
-        print('\r\nSatellite Signal Strength Message:\r\n system_time: {0:3.2f} GPS_time: {1:3.2f} Satellites_Number: {2} receiver_id: {3} antenna_id: {4}'
-        .format(system_time, GPS_time, n_sv, receiver_id, antenna_id))
-
-        for i in range(n_sv):
-            sv_system = data[nsv_idx + i*10 + 1]
-            SVID = data[nsv_idx + i*10 + 2]
-            L1CN = struct.unpack('<f', struct.pack('4B', *(data[nsv_idx + i*10 + 3: nsv_idx + i*10 + 7])))[0]
-            L2CN = struct.unpack('<f', struct.pack('4B', *(data[nsv_idx + i*10 + 7: nsv_idx + i*10 + 11])))[0]
-            print('Satellite-{0} sv_system: {1} SVID: {2} L1CN: {3:3.2f} L2CN: {4:3.2f}'.format(i, sv_system, SVID, L1CN, L2CN))
-
-    def handle_msg_03(self, data):
-        pass
-
-    def handle_msg_04(self, data):
-        pass
-
-    def handle_msg_0A(self, data):
-        print('{0}:Repackaged GSV Message'.format(datetime.datetime.now().strftime('%Y%m%d_%H_%M_%S')))
-
-
-def main():
-    '''main'''
-    driver = RoverDriver()
-    while True:
-        try:
-            driver.reinit()
-            driver.find_device()
-        except KeyboardInterrupt:  # response for KeyboardInterrupt such as Ctrl+C
-            print('User stop this program by KeyboardInterrupt! File:[{0}], Line:[{1}]'.format(__file__, sys._getframe().f_lineno))
-            break
-        if not driver.start_log():
-            break
-
 
 if __name__ == '__main__':
-    main()
+    pass
