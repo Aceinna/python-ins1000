@@ -1,6 +1,6 @@
 # coding=utf-8
 """
-Driver for PNS(Poly Navigation System) Rover.
+Driver for INS1000 Rover.
 Based on PySerial https://github.com/pyserial/pyserial
 Created on 2018-07-01
 @author: Ocean
@@ -41,7 +41,7 @@ class RoverDriver:
         self.rover_file = os.path.join(self.setting_folder, 'rover.json')
         if not self.load_configuration():
             os._exit(1)
-        print('Program start at:{0}'.format(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')))
+        print('Rover driver start at:{0}'.format(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')))
 
     def reinit(self):
         ''' re-init parameters when occur SerialException.
@@ -82,8 +82,8 @@ class RoverDriver:
             if len(serial_data):
                 # print(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S:') + ' '.join('0X{0:x}'.format(serial_data[i]) for i in range(len(serial_data))))
                 self.data_lock.acquire()
-                for i in range(len(serial_data)):
-                    self.data_queue.put(serial_data[i])
+                for d in serial_data:
+                    self.data_queue.put(d)
                 self.data_lock.release()
 
     def parser(self):
@@ -93,6 +93,7 @@ class RoverDriver:
         HEADER = [0XAF, 0X20, 0X05]
         PAYLOAD_LEN_IDX = 4
         MSG_SUB_ID_IDX = 3
+        MAX_FRAME_LIMIT = 500  # assume max len of frame is smaller than MAX_FRAME_LIMIT.
 
         sync_pattern = collections.deque(3*[0], 3)
         find_header = False
@@ -109,7 +110,7 @@ class RoverDriver:
             self.data_lock.acquire()
             if self.data_queue.empty():
                 self.data_lock.release()
-                time.sleep(0.01)
+                time.sleep(0.0001)
                 continue
             else:
                 data = self.data_queue.get()
@@ -131,6 +132,11 @@ class RoverDriver:
                             print("Checksum error!")
                     else:
                         pass
+
+                    if payload_len > MAX_FRAME_LIMIT or len(frame) > MAX_FRAME_LIMIT:
+                        find_header = False
+                        payload_len = 0
+
                 else:  # if haven't found header [0XAF, 0X20, 0X05].
                     sync_pattern.append(data)
                     if operator.eq(list(sync_pattern), HEADER):
@@ -185,8 +191,8 @@ class RoverDriver:
             return True
 
         funcs = [self.receiver, self.parser]
-        for i in range(len(funcs)):
-            t = threading.Thread(target=funcs[i], args=())
+        for func in funcs:
+            t = threading.Thread(target=func, args=())
             t.start()
             print("Thread[{0}({1})] started.".format(t.name, t.ident))
             self.threads.append(t)
@@ -194,9 +200,9 @@ class RoverDriver:
         if self.handle_KeyboardInterrupt():
             return False
 
-        for i in range(len(self.threads)):
-            self.threads[i].join()
-            print("Thread[{0}({1})] stoped.".format(self.threads[i].name, self.threads[i].ident))
+        for t in self.threads:
+            t.join()
+            print("Thread[{0}({1})] stoped.".format(t.name, t.ident))
 
         self.close_serial_port()
         return True
@@ -204,14 +210,26 @@ class RoverDriver:
     def find_device(self):
         ''' Finds active ports and then autobauds units
         '''
-        if self.try_last_port():
-            pass
-        else:
-            while not self.autobaud(self.find_ports()):
-                time.sleep(0.1)
+        try:
+            if self.try_last_port():
+                pass
+            else:
+                while not self.autobaud(self.find_ports()):
+                    time.sleep(0.1)
 
-        self.app.on_find_active_rover()
-        return True
+            self.app.on_find_active_rover()
+            return True
+        except KeyboardInterrupt:  # response for KeyboardInterrupt such as Ctrl+C
+            print('User stop this program by KeyboardInterrupt! File:[{0}], Line:[{1}]'.format(__file__, sys._getframe().f_lineno))
+
+        # if self.try_last_port():
+        #     pass
+        # else:
+        #     while not self.autobaud(self.find_ports()):
+        #         time.sleep(0.1)
+
+        # self.app.on_find_active_rover()
+        # return True
 
     def find_ports(self):
         ''' Lists serial port names. Code from
@@ -357,9 +375,24 @@ class RoverDriver:
         input_packet = next((x for x in self.rover_properties['userMessages']['inputPackets'] if x['header'] == header), None)
 
         if output_packet:
-            data = self.unpack_output_packet(output_packet, payload)
-            self.change_scale(output_packet, data)
-            self.app.on_message(output_packet['name'], data)
+            var_num = None
+            is_var_len_frame = False
+            try:
+                var_num = output_packet['var_num']
+                is_var_len_frame = True
+            except KeyError:  # if there is no 'var_num' key.
+                pass
+
+            if var_num is not None:  # means this is a variable length frame, such as "Satellite Signal Strength" and "SV Visibility"
+                # time_start = time.time()
+                data = self.unpack_output_packet_var_len(output_packet, payload)
+                # time_end = time.time()
+                # print('[{0}]:unpack_output_packet_var_len cost:{1}'.format(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S'), time_end-time_start))
+                pass
+            else:
+                data = self.unpack_output_packet(output_packet, payload)
+                self.change_scale(output_packet, data)
+            self.app.on_message(output_packet['name'], data, is_var_len_frame)
         elif input_packet:
             data = self.unpack_input_packet(input_packet['responsePayload'], payload) 
         return data
@@ -406,6 +439,117 @@ class RoverDriver:
         data = struct.unpack(pack_fmt, b)
         out = [(value['name'], data[idx]) for idx, value in enumerate(output_message['payload'])]
         data = collections.OrderedDict(out)
+        return data
+
+    def unpack_output_packet_var_len(self, output_message, payload):
+        length = 0
+        pack_fmt = '<'
+        var_num_type = output_message['var_num']['type']
+        var_num_idx = output_message['var_num']['idx']
+        var_num_field_idx = output_message['var_num']['field_idx']
+        p = []
+
+        if var_num_type == 'uint8':
+            pack_fmt += 'B'
+            length = 1
+            p = payload[var_num_idx: var_num_idx+length]
+        elif var_num_type == 'uint16':
+            pack_fmt += 'H'
+            length = 2
+            p = payload[var_num_idx: var_num_idx+length]
+        elif var_num_type == 'uint32':
+            pack_fmt += 'I'
+            length = 4
+            p = payload[var_num_idx: var_num_idx+length]
+        elif var_num_type == 'uint64':
+            pack_fmt += 'Q'
+            length = 8
+            p = payload[var_num_idx: var_num_idx+length]
+
+        len_fmt = '{0}B'.format(length)
+        b = struct.pack(len_fmt, *p)
+        var_num = struct.unpack(pack_fmt, b)  # eg. var_num is N_SV in "Satellite Signal Strength" frame
+        idx = 0
+        var_len_one_gropu = 0
+        var_pack_fmt = None
+
+        length = 0
+        pack_fmt = '<'
+        for value in output_message['payload']:
+            if value['type'] == 'float':
+                pack_fmt += 'f'
+                length += 4
+            elif value['type'] == 'uint32':
+                pack_fmt += 'I'
+                length += 4
+            elif value['type'] == 'int32':
+                pack_fmt += 'i'
+                length += 4
+            elif value['type'] == 'int16':
+                pack_fmt += 'h'
+                length += 2
+            elif value['type'] == 'uint16':
+                pack_fmt += 'H'
+                length += 2
+            elif value['type'] == 'double':
+                pack_fmt += 'd'
+                length += 8
+            elif value['type'] == 'int64':
+                pack_fmt += 'q'
+                length += 8
+            elif value['type'] == 'uint64':
+                pack_fmt += 'Q'
+                length += 8
+            elif value['type'] == 'char':
+                pack_fmt += 'c'
+                length += 1
+            elif value['type'] == 'uchar':
+                pack_fmt += 'B'
+                length += 1
+            elif value['type'] == 'uint8':
+                pack_fmt += 'B'
+                length += 1
+
+            idx += 1
+            if var_num_field_idx == idx:
+                var_len_one_gropu = length
+                var_pack_fmt = pack_fmt
+
+        idx = 0
+        field_names = []
+        for idx, value in enumerate(output_message['payload']):
+            field_names.append(value['name'])
+
+        var_len_one_gropu = length - var_len_one_gropu  #eg. for "Satellite Signal Strength", var_len_one_gropu is 10 here. (SV system [1 Byte] + SVID [1 Byte] + L1CN0 [foat 4 Bytes] + L2CN0 [foat 4 Bytes])
+        length += var_len_one_gropu * (var_num[0]-1)
+
+        var_pack_fmt = pack_fmt[len(var_pack_fmt):len(pack_fmt)]  #eg. for "Satellite Signal Strength", var_pack_fmt is "BBff" here.
+        var_fileld_num = len(var_pack_fmt)  #eg. for "Satellite Signal Strength", var_fileld_num is 4, the number of variable filelds.
+        const_fileld_num = len(pack_fmt) - var_fileld_num - 1 #eg. for "Satellite Signal Strength", const_fileld_num is 4, the number of const filelds.
+        pack_fmt += var_pack_fmt * (var_num[0]-1)
+
+        # const_fileld_names = field_names[0:var_fileld_num+1]  #eg. for "Satellite Signal Strength", const_fileld_names is ['System time','GPS time','Receiver_ID','Antenna_ID','N_SV']
+        var_fileld_names = field_names[var_fileld_num+1:len(pack_fmt)]  #eg. for "Satellite Signal Strength", var_fileld_names is ['SV_system','SVID','L1CN0','L2CN0']
+        field_names += var_fileld_names * (var_num[0]-1)
+
+        len_fmt = '{0}B'.format(length)
+        b = struct.pack(len_fmt, *payload)
+        payload_data = struct.unpack(pack_fmt, b)
+
+        data = []
+        info = collections.OrderedDict()
+        for idx, value in enumerate(field_names):
+            if idx < const_fileld_num:
+                info[value] = payload_data[idx]
+                data.append(info.copy())
+                info.clear()
+            else:
+                info[value] = payload_data[idx]
+                if len(info) == var_fileld_num:
+                    data.append(info.copy())
+                    info.clear()
+
+        # print (json.dumps(data))
         return data
 
     def change_scale(self, output_message, data):

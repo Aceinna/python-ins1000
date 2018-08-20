@@ -11,7 +11,7 @@
                 "name": "KFN",
                 "header": "AF200501",
                 "description": "Kalman Filter Navigation Message",	
-                "payload" : [
+				"payload" : [
                     {
                         "type" : "double",
                         "name" : "System time",
@@ -243,20 +243,131 @@
                 ],
                 "graphs" : [
                     { 
-                        "name" : "Position",
-                        "units" : "m",
-                        "xAxis" : "m",
-                        "yAxes" : [ "N", "E", "D"],
-                        "colors" : [ "#FF0000", "#00FF00", "#0000FF" ],
-                        "yMax" : 80
                     },
                     {
-                        "name" : "Attitude",
-                        "units" : "deg",
-                        "xAxis" : "deg",
-                        "yAxes" : [ "N", "E", "D"],
-                        "colors" : [ "#FF0000", "#00FF00", "#0000FF" ],
-                        "yMax" : 360
+                    }
+                ]
+            },
+            {
+                "name": "SSS",
+                "header": "AF200502",
+                "description": "Satellite Signal Strength.",
+                "var_num":{
+                    "comment": "type: var_num's type, idx: index of var_num in payload(bytearray), field_idx: begining idex of var filed in payload(json)",
+                    "type" : "uint8",
+                    "idx": 18,
+                    "field_idx": 5
+                },
+                "payload" : [
+                    {
+                        "type" : "double",
+                        "name" : "System time",
+                        "unit" : "s"
+                    },
+                    {
+                        "type" : "double",
+                        "name" : "GPS time",
+                        "unit" : "s"
+                    },
+                    {
+                        "type" : "uint8",
+                        "name" : "Receiver_ID",
+                        "unit" : ""
+                    },
+                    {
+                        "type" : "uint8",
+                        "name" : "Antenna_ID",
+                        "unit" : ""
+                    },
+                    {
+                        "type" : "uint8",
+                        "name" : "N_SV",
+                        "unit" : ""
+                    },
+                    {
+                        "type" : "uint8",
+                        "name" : "SV_system",
+                        "unit" : "m/s"
+                    },
+                    {
+                        "type" : "uint8",
+                        "name" : "SVID",
+                        "unit" : "m/s"
+                    },
+                    {
+                        "type" : "float",
+                        "name" : "L1CN0",
+                        "unit" : "dB-Hz"
+                    },
+                    {
+                        "type" : "float",
+                        "name" : "L2CN0",
+                        "unit" : "dB-Hz"
+                    }
+                ],
+                "graphs" : [
+                    { 
+                    },
+                    {
+                    }
+                ]
+            },
+            {
+                "name": "SVV",
+                "header": "AF200503",
+                "description": "SV Visibility.",
+                "var_num":{
+                    "comment": "type: var_num's type, idx: index of var_num in payload(bytearray), field_idx: begining idex of var filed in payload(json)",
+                    "type" : "uint8",
+                    "idx": 17,
+                    "field_idx": 4
+                },
+                "payload" : [
+                    {
+                        "type" : "double",
+                        "name" : "System time",
+                        "unit" : "s"
+                    },
+                    {
+                        "type" : "double",
+                        "name" : "GPS time",
+                        "unit" : "s"
+                    },
+                    {
+                        "type" : "uint8",
+                        "name" : "Receiver_Num",
+                        "unit" : ""
+                    },
+                    {
+                        "type" : "uint8",
+                        "name" : "N_SV",
+                        "unit" : ""
+                    },
+                    {
+                        "type" : "uint8",
+                        "name" : "SV_system",
+                        "unit" : "m/s"
+                    },
+                    {
+                        "type" : "uint8",
+                        "name" : "SVID",
+                        "unit" : "m/s"
+                    },
+                    {
+                        "type" : "float",
+                        "name" : "Azimuth",
+                        "unit" : "deg"
+                    },
+                    {
+                        "type" : "float",
+                        "name" : "Elevation",
+                        "unit" : "deg"
+                    }
+                ],
+                "graphs" : [
+                    { 
+                    },
+                    {
                     }
                 ]
             }
