@@ -267,7 +267,7 @@
                     {
                         "type" : "double",
                         "name" : "GPS time",
-                        "unit" : "s"
+                        "unit" : ""
                     },
                     {
                         "type" : "uint8",
@@ -287,12 +287,12 @@
                     {
                         "type" : "uint8",
                         "name" : "SV_system",
-                        "unit" : "m/s"
+                        "unit" : ""
                     },
                     {
                         "type" : "uint8",
                         "name" : "SVID",
-                        "unit" : "m/s"
+                        "unit" : ""
                     },
                     {
                         "type" : "float",
@@ -313,14 +313,14 @@
                 ]
             },
             {
-                "name": "SVV",
-                "header": "AF200503",
-                "description": "SV Visibility.",
+                "name": "GSVM",
+                "header": "AF20050A",
+                "description": "Repackaged GSV Message.",
                 "var_num":{
                     "comment": "type: var_num's type, idx: index of var_num in payload(bytearray), field_idx: begining idex of var filed in payload(json)",
                     "type" : "uint8",
-                    "idx": 17,
-                    "field_idx": 4
+                    "idx": 11,
+                    "field_idx": 5
                 },
                 "payload" : [
                     {
@@ -329,13 +329,18 @@
                         "unit" : "s"
                     },
                     {
-                        "type" : "double",
-                        "name" : "GPS time",
-                        "unit" : "s"
+                        "type" : "uint8",
+                        "name" : "Receiver_number",
+                        "unit" : ""
                     },
                     {
                         "type" : "uint8",
-                        "name" : "Receiver_Num",
+                        "name" : "Antenna_ID",
+                        "unit" : ""
+                    },
+                    {
+                        "type" : "uint8",
+                        "name" : "SV_system",
                         "unit" : ""
                     },
                     {
@@ -345,23 +350,23 @@
                     },
                     {
                         "type" : "uint8",
-                        "name" : "SV_system",
-                        "unit" : "m/s"
+                        "name" : "SVID",
+                        "unit" : ""
                     },
                     {
                         "type" : "uint8",
-                        "name" : "SVID",
-                        "unit" : "m/s"
-                    },
-                    {
-                        "type" : "float",
                         "name" : "Azimuth",
                         "unit" : "deg"
                     },
                     {
-                        "type" : "float",
+                        "type" : "uint16",
                         "name" : "Elevation",
                         "unit" : "deg"
+                    },
+                    {
+                        "type" : "uint8",
+                        "name" : "SNR",
+                        "unit" : "db-Hz"
                     }
                 ],
                 "graphs" : [

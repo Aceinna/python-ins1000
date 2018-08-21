@@ -98,7 +98,11 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
                           output_packet['payload'][keyIdx]['unit'] + \
                           ']'''
                 dataStr = output_packet['payload'][keyIdx]['name']
-                labels = labels + '{0:s},'.format(dataStr)
+                unitStr = output_packet['payload'][keyIdx]['unit']
+                if unitStr == '':
+                    labels = labels + '{0:s},'.format(dataStr)
+                else:
+                    labels = labels + '{0:s}({1:s}),'.format(dataStr, unitStr)
 
             # Remove the comma at the end of the string and append a new-line character
             labels = labels[:-1]
@@ -161,7 +165,11 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
             labels = ''
             for value in output_packet['payload']:
                 dataStr = value['name']
-                labels = labels + '{0:s},'.format(dataStr)
+                unitStr = value['unit']
+                if unitStr == '':
+                    labels = labels + '{0:s},'.format(dataStr)
+                else:
+                    labels = labels + '{0:s}({1:s}),'.format(dataStr, unitStr)
             # Remove the comma at the end of the string and append a new-line character
             labels = labels[:-1]
             header = labels + '\n'

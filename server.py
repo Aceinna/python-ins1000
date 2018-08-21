@@ -13,12 +13,11 @@ import driver_ins1000
 import file_storage
 
 
-callback_rate = 1000
+callback_rate = 100
 data_lock = threading.Lock()  # used to protect data_receiver.data.
 
 
 class WSHandler(tornado.websocket.WebSocketHandler):
-        
     def open(self):
         self.callback = tornado.ioloop.PeriodicCallback(self.send_data, callback_rate)
         self.callback.start()

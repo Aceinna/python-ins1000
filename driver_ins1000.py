@@ -85,6 +85,8 @@ class RoverDriver:
                 for d in serial_data:
                     self.data_queue.put(d)
                 self.data_lock.release()
+            else:
+                time.sleep(0.001)
 
     def parser(self):
         ''' get serial data from data_queue and parse data into one whole frame.
@@ -110,7 +112,7 @@ class RoverDriver:
             self.data_lock.acquire()
             if self.data_queue.empty():
                 self.data_lock.release()
-                time.sleep(0.0001)
+                time.sleep(0.001)
                 continue
             else:
                 data = self.data_queue.get()
@@ -520,10 +522,10 @@ class RoverDriver:
         for idx, value in enumerate(output_message['payload']):
             field_names.append(value['name'])
 
-        var_len_one_gropu = length - var_len_one_gropu  #eg. for "Satellite Signal Strength", var_len_one_gropu is 10 here. (SV system [1 Byte] + SVID [1 Byte] + L1CN0 [foat 4 Bytes] + L2CN0 [foat 4 Bytes])
+        var_len_one_gropu = length - var_len_one_gropu  #eg. for "Satellite Signal Strength", var_len_one_gropu is 10. (SV system [1 Byte] + SVID [1 Byte] + L1CN0 [foat 4 Bytes] + L2CN0 [foat 4 Bytes])
         length += var_len_one_gropu * (var_num[0]-1)
 
-        var_pack_fmt = pack_fmt[len(var_pack_fmt):len(pack_fmt)]  #eg. for "Satellite Signal Strength", var_pack_fmt is "BBff" here.
+        var_pack_fmt = pack_fmt[len(var_pack_fmt):len(pack_fmt)]  #eg. for "Satellite Signal Strength", var_pack_fmt is "BBff".
         var_fileld_num = len(var_pack_fmt)  #eg. for "Satellite Signal Strength", var_fileld_num is 4, the number of variable filelds.
         const_fileld_num = len(pack_fmt) - var_fileld_num - 1 #eg. for "Satellite Signal Strength", const_fileld_num is 4, the number of const filelds.
         pack_fmt += var_pack_fmt * (var_num[0]-1)
