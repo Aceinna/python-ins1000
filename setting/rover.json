@@ -355,12 +355,12 @@
                     },
                     {
                         "type" : "uint8",
-                        "name" : "Azimuth",
+                        "name" : "Elevation",
                         "unit" : "deg"
                     },
                     {
                         "type" : "uint16",
-                        "name" : "Elevation",
+                        "name" : "Azimuth",
                         "unit" : "deg"
                     },
                     {

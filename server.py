@@ -13,10 +13,6 @@ import driver_ins1000
 import file_storage
 
 
-callback_rate = 100
-data_lock = threading.Lock()  # used to protect data_receiver.data.
-
-
 class WSHandler(tornado.websocket.WebSocketHandler):
     def open(self):
         self.callback = tornado.ioloop.PeriodicCallback(self.send_data, callback_rate)
@@ -26,8 +22,10 @@ class WSHandler(tornado.websocket.WebSocketHandler):
         # time_start = time.time()
         # data_lock.acquire()
         # print(driver.data_queue.qsize())
-        if data_receiver.data is not None:
-            self.write_message(json.dumps({ 'messageType' : 'event',  'data' : {'packetType' : data_receiver.packet_type, 'newOutput' : data_receiver.data }}))
+        if data_receiver.latest_packets is not None:
+            for key in data_receiver.latest_packets:
+                self.write_message(json.dumps({ 'messageType' : 'event',  'data' : {'packetType' : key, 'newOutput' : data_receiver.latest_packets[key] }}))
+            data_receiver.latest_packets.clear()
             # print(json.dumps({ 'messageType' : 'event',  'data' : { 'newOutput' : data_receiver.data }}))
         # data_lock.release()
         # time_end = time.time()
@@ -47,7 +45,7 @@ class DataReceiver(rover_application_base.RoverApplicationBase):
     def __init__(self, user=False):
         '''Init
         '''
-        self.data = None
+        self.latest_packets = {}
         pass
 
     def on_reinit(self):
@@ -58,15 +56,16 @@ class DataReceiver(rover_application_base.RoverApplicationBase):
 
     def on_message(self, *args):
         data_lock.acquire()
-        self.packet_type = args[0]
-        self.data = args[1]
+        packet_type = args[0]
+        data = args[1]
         is_var_len_frame = args[2]
-        print('[{0}]:{1}'.format(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S'), self.packet_type))
-        # print(self.data)
+        print('[{0}]:{1}'.format(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S'), packet_type))
+        self.latest_packets[packet_type] = data
+
         if is_var_len_frame:
-            rover_log.log_var_len(self.data, self.packet_type)
+            rover_log.log_var_len(data, packet_type)
         else:
-            rover_log.log(self.data, self.packet_type)
+            rover_log.log(data, packet_type)
         data_lock.release()
 
     def on_exit(self):
@@ -87,6 +86,9 @@ def driver_thread(driver):
 
 if __name__ == '__main__':
     '''main'''
+    callback_rate = 1000
+    data_lock = threading.Lock()
+
     try:
         driver = driver_ins1000.RoverDriver()
         data_receiver = DataReceiver()
