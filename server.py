@@ -27,7 +27,7 @@ class WSHandler(tornado.websocket.WebSocketHandler):
         # data_lock.acquire()
         # print(driver.data_queue.qsize())
         if data_receiver.data is not None:
-            self.write_message(json.dumps({ 'messageType' : 'event',  'data' : { 'newOutput' : data_receiver.data }}))
+            self.write_message(json.dumps({ 'messageType' : 'event',  'data' : {'packetType' : data_receiver.packet_type, 'newOutput' : data_receiver.data }}))
             # print(json.dumps({ 'messageType' : 'event',  'data' : { 'newOutput' : data_receiver.data }}))
         # data_lock.release()
         # time_end = time.time()
@@ -58,15 +58,15 @@ class DataReceiver(rover_application_base.RoverApplicationBase):
 
     def on_message(self, *args):
         data_lock.acquire()
-        packet_type = args[0]
+        self.packet_type = args[0]
         self.data = args[1]
         is_var_len_frame = args[2]
-        print('[{0}]:{1}'.format(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S'), packet_type))
+        print('[{0}]:{1}'.format(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S'), self.packet_type))
         # print(self.data)
         if is_var_len_frame:
-            rover_log.log_var_len(self.data, packet_type)
+            rover_log.log_var_len(self.data, self.packet_type)
         else:
-            rover_log.log(self.data, packet_type)
+            rover_log.log(self.data, self.packet_type)
         data_lock.release()
 
     def on_exit(self):
