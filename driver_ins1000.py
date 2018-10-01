@@ -394,7 +394,8 @@ class RoverDriver:
             else:
                 data = self.unpack_output_packet(output_packet, payload)
                 self.change_scale(output_packet, data)
-            self.app.on_message(output_packet['name'], data, is_var_len_frame)
+            if data:
+                self.app.on_message(output_packet['name'], data, is_var_len_frame)
         elif input_packet:
             data = self.unpack_input_packet(input_packet['responsePayload'], payload) 
         return data
@@ -471,6 +472,9 @@ class RoverDriver:
         len_fmt = '{0}B'.format(length)
         b = struct.pack(len_fmt, *p)
         var_num = struct.unpack(pack_fmt, b)  # eg. var_num is N_SV in "Satellite Signal Strength" frame
+        if var_num[0] == 0:
+            return []
+
         idx = 0
         var_len_one_gropu = 0
         var_pack_fmt = None
