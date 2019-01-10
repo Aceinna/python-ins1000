@@ -32,9 +32,12 @@ class WSHandler(tornado.websocket.WebSocketHandler):
         # print('[{0}]:send_data cost:{1}'.format(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S'), time_end-time_start))
 
     def on_message(self, message):
-        return True
+        message = json.loads(message)
+        if message['messageType'] != 'serverStatus':
+            file_storage.RoverLogApp(message['data'])
 
     def on_close(self):
+        print('I am gere')
         self.callback.stop()
         return False
 
@@ -55,11 +58,12 @@ class DataReceiver(rover_application_base.RoverApplicationBase):
         pass
 
     def on_message(self, *args):
+
         data_lock.acquire()
         packet_type = args[0]
         data = args[1]
         is_var_len_frame = args[2]
-        print('[{0}]:{1}'.format(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S'), packet_type))
+        # print('[{0}]:{1}'.format(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S'), packet_type))
         self.latest_packets[packet_type] = data
 
         if is_var_len_frame:
@@ -101,6 +105,7 @@ if __name__ == '__main__':
         http_server.listen(8000)
         tornado.ioloop.IOLoop.instance().start()
     except KeyboardInterrupt:  # response for KeyboardInterrupt such as Ctrl+C
+        os.remove("tempLogFiles.json")
         print('User stop this program by KeyboardInterrupt! File:[{0}], Line:[{1}]'.format(__file__, sys._getframe().f_lineno))
         os._exit(1)
     except Exception as e:
