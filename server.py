@@ -37,7 +37,6 @@ class WSHandler(tornado.websocket.WebSocketHandler):
             file_storage.RoverLogApp(message['data'])
 
     def on_close(self):
-        print('I am gere')
         self.callback.stop()
         return False
 
