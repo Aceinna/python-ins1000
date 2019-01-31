@@ -70,6 +70,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
             self.savetoAnsPlatform()
 
         if user and list(user.keys())[0] == 'stopLog':
+            time.sleep(10)
             self.close()
                 # os.remove("tempLogFiles.json")
 
