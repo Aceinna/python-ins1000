@@ -26,6 +26,9 @@ class WSHandler(tornado.websocket.WebSocketHandler):
             for key in data_receiver.latest_packets:
                 self.write_message(json.dumps({ 'messageType' : 'event',  'data' : {'packetType' : key, 'newOutput' : data_receiver.latest_packets[key] }}))
             data_receiver.latest_packets.clear()
+            for key in data_receiver.all_GSVM_packets:
+                self.write_message(json.dumps({ 'messageType' : 'event',  'data' : {'packetType' : 'GSVM', 'newOutput' : key }}))
+            data_receiver.all_GSVM_packets = []
             # print(json.dumps({ 'messageType' : 'event',  'data' : { 'newOutput' : data_receiver.data }}))
         # data_lock.release()
         # time_end = time.time()
@@ -48,6 +51,7 @@ class DataReceiver(rover_application_base.RoverApplicationBase):
         '''Init
         '''
         self.latest_packets = {}
+        self.all_GSVM_packets = []
         pass
 
     def on_reinit(self):
@@ -63,7 +67,10 @@ class DataReceiver(rover_application_base.RoverApplicationBase):
         data = args[1]
         is_var_len_frame = args[2]
         # print('[{0}]:{1}'.format(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S'), packet_type))
-        self.latest_packets[packet_type] = data
+        if packet_type == 'GSVM':
+            self.all_GSVM_packets.append(data)
+        else:
+            self.latest_packets[packet_type] = data
 
         if is_var_len_frame:
             rover_log.log_var_len(data, packet_type)

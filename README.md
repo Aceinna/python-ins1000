@@ -11,7 +11,7 @@ Python driver for INS1000 RTK System
 ## testing environment 
 - Windows10: python2.7 and python 3.7
 - cygwin: python2.7 and python 3.6
-- MaxOS: python2.7
+- Mac OS: python2.7
 
 ## steps
 
