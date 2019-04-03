@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*
 import sys
 import os
 import time
@@ -120,7 +121,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
         # except (ValueError, KeyError, TypeError) as error:
         except Exception as e:
             print(e)
-            return Falsez
+            return False
 
     def log(self, data, packet_type):
         ''' Parse the data, read in from the unit, and generate a data file using
@@ -184,7 +185,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
             elif outputPcktType == 'uint8':
                 # byte
                 str += '{0:d},'.format(data[key])
-            elif outputPcktType == 'uchar' or outputPcktType == 'char':
+            elif outputPcktType == 'uchar' or outputPcktType == 'char' or outputPcktType == 'string':
                 # character
                 str += '{:},'.format(data[key])
             else:
@@ -194,6 +195,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
         str = str[:-1]
         str = str + '\n'
         self.log_files[packet_type].write(header+str)
+        # self.log_files[packet_type].flush()
 
     def log_var_len(self, data, packet_type):
         ''' Parse the data, read in from the unit, and generate a data file using

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*
 import sys
 import os
 import datetime
@@ -14,25 +15,35 @@ import file_storage
 
 
 class WSHandler(tornado.websocket.WebSocketHandler):
+
+    def __init__(self, *args, **kwargs):
+        tornado.websocket.WebSocketHandler.__init__(self, *args, **kwargs)
+        self.users=[]
+        
     def open(self):
+        self.users.append(self)
+        data_receiver.b_have_client = True
         self.callback = tornado.ioloop.PeriodicCallback(self.send_data, callback_rate)
         self.callback.start()
 
     def send_data(self):
-        # time_start = time.time()
-        # data_lock.acquire()
-        # print(driver.data_queue.qsize())
+        data_lock.acquire()
         if data_receiver.latest_packets is not None:
             for key in data_receiver.latest_packets:
-                self.write_message(json.dumps({ 'messageType' : 'event',  'data' : {'packetType' : key, 'newOutput' : data_receiver.latest_packets[key] }}))
+                json_msg = json.dumps({ 'messageType' : 'event',  'data' : {'packetType' : key, 'packet' : data_receiver.latest_packets[key] }})
+                self.write_message(json_msg)
+                print(json_msg)
+                print('************')
             data_receiver.latest_packets.clear()
+
             for key in data_receiver.all_GSVM_packets:
-                self.write_message(json.dumps({ 'messageType' : 'event',  'data' : {'packetType' : 'GSVM', 'newOutput' : key }}))
+                json_msg = json.dumps({ 'messageType' : 'event',  'data' : {'packetType' : 'GSVM', 'packet' : key }})
+                self.write_message(json_msg)
+                # print(json_msg)
+                # print('************')
             data_receiver.all_GSVM_packets = []
-            # print(json.dumps({ 'messageType' : 'event',  'data' : { 'newOutput' : data_receiver.data }}))
-        # data_lock.release()
-        # time_end = time.time()
-        # print('[{0}]:send_data cost:{1}'.format(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S'), time_end-time_start))
+            # print(json.dumps({ 'messageType' : 'event',  'data' : { 'data' : data_receiver.data }}))
+        data_lock.release()
 
     def on_message(self, message):
         message = json.loads(message)
@@ -41,6 +52,15 @@ class WSHandler(tornado.websocket.WebSocketHandler):
 
     def on_close(self):
         self.callback.stop()
+
+        data_lock.acquire()
+        self.users.remove(self) # remove the closed web client from users.
+        if len(self.users) == 0: # clear all packets if no web client connect with server.
+            data_receiver.b_have_client = False
+            data_receiver.latest_packets.clear()
+            data_receiver.all_GSVM_packets = []
+        data_lock.release()
+
         return False
 
     def check_origin(self, origin):
@@ -52,6 +72,7 @@ class DataReceiver(rover_application_base.RoverApplicationBase):
         '''
         self.latest_packets = {}
         self.all_GSVM_packets = []
+        self.b_have_client = False
         pass
 
     def on_reinit(self):
@@ -61,21 +82,48 @@ class DataReceiver(rover_application_base.RoverApplicationBase):
         pass
 
     def on_message(self, *args):
-
         data_lock.acquire()
         packet_type = args[0]
         data = args[1]
         is_var_len_frame = args[2]
         # print('[{0}]:{1}'.format(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S'), packet_type))
-        if packet_type == 'GSVM':
-            self.all_GSVM_packets.append(data)
-        else:
-            self.latest_packets[packet_type] = data
+        '''
+            1. Message which need to send to Web client every x seconds by timer.
+                1.1 KFN: Kalman Filter Navigation Message
+                1.2 SA: Sensor Activity.
+                1.3 NCA: NTRIP Client Activity.
+            2. Message which need to send all to Web client.
+                2.1 SSS: Satellite Signal Strength
+                2.2 GSVM: Repackaged GSV Message
+            3. Message which need to be re-built then send to Web client.
+                3.1 CNM: Compact Navigation Message (High Rate)
+            4. Message which need to send to Web client at once when driver receives.
+                4.1 PID: Product ID Message.
+                4.2 EV: Engine Version Message.
+            5. Message which needn't to send to Web client.
+                5.1 TSM: PPS info.
+        '''
+        if self.b_have_client:
+            if packet_type == 'GSVM':
+                self.all_GSVM_packets.append(data)
+            # elif packet_type == 'CNM':
+            #     pass
+            else:
+                self.latest_packets[packet_type] = data
 
-        if is_var_len_frame:
-            rover_log.log_var_len(data, packet_type)
-        else:
-            rover_log.log(data, packet_type)
+        '''
+            Message which need to log to file:
+            1 KFN: Kalman Filter Navigation Message
+            2 SSS: Satellite Signal Strength
+            3 GSVM: Repackaged GSV Message
+            4 CNM: Compact Navigation Message (High Rate)
+            5 NAV: Navigation information.
+        '''
+        if packet_type == 'KFN' or packet_type == 'SSS' or packet_type == 'CNM' or packet_type == 'NAV':
+            if is_var_len_frame:
+                rover_log.log_var_len(data, packet_type)
+            else:
+                rover_log.log(data, packet_type)
         data_lock.release()
 
     def on_exit(self):
