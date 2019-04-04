@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*
 import sys
 import os
 import time
@@ -7,8 +8,6 @@ import rover_application_base
 import driver_ins1000
 import requests
 import threading
-
-
 from azure.storage.blob import AppendBlobService
 from azure.storage.blob import ContentSettings
 
@@ -17,17 +16,11 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
     def __init__(self, user=False):
         '''Initialize and create a CSV file
         '''
-
-
-
         if user and list(user.keys())[0] == 'startLog':
             self.username = user['startLog']['username']
             self.userId = user['startLog']['id']
             self.userFilename = user['startLog']['fileName']
             self.userAccessToken = user['startLog']['access_token']
-
-
-
 
         self.start_time = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         if not self.load_configuration():
@@ -44,7 +37,6 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
                 data = json.load(outfile)
                 self.log_file_names = data
 
-
         if not user:
             with open('tempLogFiles.json', 'w') as outfile:
                 json.dump({}, outfile)
@@ -55,7 +47,6 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
                     self.log_files[packet['name']] = open('data/' + self.log_file_names[packet['name']], 'w')# just log Compact Navigation Message
 
                     entry = {packet['name']:self.log_file_names[packet['name']]}
-
 
                     with open('tempLogFiles.json') as f:
                         data = json.load(f)
@@ -73,10 +64,6 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
             time.sleep(10)
             self.close()
                 # os.remove("tempLogFiles.json")
-
-
-
-
 
     def on_reinit(self):
         print ("RoverLogApp.on_reinit()")
@@ -184,7 +171,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
             elif outputPcktType == 'uint8':
                 # byte
                 str += '{0:d},'.format(data[key])
-            elif outputPcktType == 'uchar' or outputPcktType == 'char':
+            elif outputPcktType == 'uchar' or outputPcktType == 'char' or outputPcktType == 'string':
                 # character
                 str += '{:},'.format(data[key])
             else:
@@ -194,6 +181,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
         str = str[:-1]
         str = str + '\n'
         self.log_files[packet_type].write(header+str)
+        self.log_files[packet_type].flush()
 
     def log_var_len(self, data, packet_type):
         ''' Parse the data, read in from the unit, and generate a data file using
@@ -241,34 +229,32 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
                 var_fileld_tpyes.append(value['type'])
 
         for idx, key in enumerate(data):
-            if idx < const_fileld_num:
-                outputPcktType = output_packet['payload'][idx]['type']
+            if idx == 0: # handle const filelds which are all in the first item of data.
+                for i, (k, v) in enumerate(key.items()):
+                    outputPcktType = output_packet['payload'][i]['type']
 
-                if outputPcktType == 'uint32' or outputPcktType == 'int32' or \
-                outputPcktType == 'uint16' or outputPcktType == 'int16' or \
-                outputPcktType == 'uint64' or outputPcktType == 'int64':
-                    # integers and unsigned integers
-                    const_str += '{0:d},'.format(list(key.values())[0])
-                elif outputPcktType == 'double':
-                    # double
-                    const_str += '{0:15.12f},'.format(list(key.values())[0])
-                elif outputPcktType == 'float':
-                    # print(3) #key + str(2))
-                    const_str += '{0:12.8f},'.format(list(key.values())[0])
-                elif outputPcktType == 'uint8':
-                    # byte
-                    const_str += '{0:d},'.format(list(key.values())[0])
-                elif outputPcktType == 'uchar' or outputPcktType == 'char':
-                    # character
-                    const_str += '{:},'.format(list(key.values())[0])
-                else:
-                    # unknown
-                    const_str += '{0:3.5f},'.format(key.values()[0])
+                    if outputPcktType == 'uint32' or outputPcktType == 'int32' or \
+                    outputPcktType == 'uint16' or outputPcktType == 'int16' or \
+                    outputPcktType == 'uint64' or outputPcktType == 'int64':
+                        # integers and unsigned integers
+                        const_str += '{0:d},'.format(v)
+                    elif outputPcktType == 'double':
+                        # double
+                        const_str += '{0:15.12f},'.format(v)
+                    elif outputPcktType == 'float':
+                        const_str += '{0:12.8f},'.format(v)
+                    elif outputPcktType == 'uint8':
+                        # byte
+                        const_str += '{0:d},'.format(v)
+                    elif outputPcktType == 'uchar' or outputPcktType == 'char' or outputPcktType == 'string':
+                        # character
+                        const_str += '{:},'.format(v)
+                    else:
+                        # unknown
+                        const_str += '{0:3.5f},'.format(v)
             else:
-                idx_key = -1
-                for k ,v in key.items():
-                    idx_key += 1
-                    outputPcktType = var_fileld_tpyes[idx_key]
+                for i, (k, v) in enumerate(key.items()):
+                    outputPcktType = var_fileld_tpyes[i]
                     if outputPcktType == 'uint32' or outputPcktType == 'int32' or \
                     outputPcktType == 'uint16' or outputPcktType == 'int16' or \
                     outputPcktType == 'uint64' or outputPcktType == 'int64':
@@ -297,6 +283,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
                 header = ''
                 str = ''
                 var_str = ''
+                # self.log_files[packet_type].flush()
 
     ''' Upload CSV's to Azure container.
     '''

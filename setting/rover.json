@@ -36,7 +36,7 @@
                     },
                     {
                         "type" : "double",
-                        "name" : "Ellipsoidal height",
+                        "name" : "Altitude",
                         "unit" : "m"
                     },
                     {
@@ -96,6 +96,146 @@
                 ]
             },
             {
+                "name": "SSS",
+                "header": "AF200502",
+                "description": "Satellite Signal Strength.",
+                "var_num":{
+                    "comment": "type: var_num's type, idx: index of var_num in payload(bytearray), field_idx: begining idex of var filed in payload(json)",
+                    "type" : "uint8",
+                    "idx": 18,
+                    "field_idx": 5
+                },
+                "payload" : [
+                    {
+                        "type" : "double",
+                        "name" : "System time",
+                        "unit" : "s"
+                    },
+                    {
+                        "type" : "double",
+                        "name" : "GPS time",
+                        "unit" : ""
+                    },
+                    {
+                        "type" : "uint8",
+                        "name" : "Receiver_ID",
+                        "unit" : ""
+                    },
+                    {
+                        "type" : "uint8",
+                        "name" : "Antenna_ID",
+                        "unit" : ""
+                    },
+                    {
+                        "type" : "uint8",
+                        "name" : "N_SV",
+                        "unit" : ""
+                    },
+                    {
+                        "type" : "uint8",
+                        "name" : "SV_system",
+                        "unit" : ""
+                    },
+                    {
+                        "type" : "uint8",
+                        "name" : "SVID",
+                        "unit" : ""
+                    },
+                    {
+                        "type" : "float",
+                        "name" : "L1CN0",
+                        "unit" : "dB-Hz"
+                    },
+                    {
+                        "type" : "float",
+                        "name" : "L2CN0",
+                        "unit" : "dB-Hz"
+                    }
+                ],
+                "graphs" : [
+                    { 
+                    },
+                    {
+                    }
+                ]
+            },
+            {
+                "name": "PID",
+                "header": "AF200506",
+                "description": "Product ID Message.This message contains the identification number of the product. To receive this message send the message defined in Section 8.1.",
+                "payload" : [
+                    {
+                        "type" : "uint16",
+                        "name" : "Product ID",
+                        "unit" : ""
+                    }
+                ]
+            },
+            {
+                "name": "GSVM",
+                "header": "AF20050A",
+                "description": "Repackaged GSV Message.",
+                "var_num":{
+                    "comment": "type: var_num's type, idx: index of var_num in payload(bytearray), field_idx: begining idex of var filed in payload(json)",
+                    "type" : "uint8",
+                    "idx": 11,
+                    "field_idx": 5
+                },
+                "payload" : [
+                    {
+                        "type" : "double",
+                        "name" : "System time",
+                        "unit" : "s"
+                    },
+                    {
+                        "type" : "uint8",
+                        "name" : "Receiver_number",
+                        "unit" : ""
+                    },
+                    {
+                        "type" : "uint8",
+                        "name" : "Antenna_ID",
+                        "unit" : ""
+                    },
+                    {
+                        "type" : "uint8",
+                        "name" : "SV_system",
+                        "unit" : ""
+                    },
+                    {
+                        "type" : "uint8",
+                        "name" : "N_SV",
+                        "unit" : ""
+                    },
+                    {
+                        "type" : "uint8",
+                        "name" : "SVID",
+                        "unit" : ""
+                    },
+                    {
+                        "type" : "uint8",
+                        "name" : "Elevation",
+                        "unit" : "deg"
+                    },
+                    {
+                        "type" : "uint16",
+                        "name" : "Azimuth",
+                        "unit" : "deg"
+                    },
+                    {
+                        "type" : "uint8",
+                        "name" : "SNR",
+                        "unit" : "db-Hz"
+                    }
+                ],
+                "graphs" : [
+                    { 
+                    },
+                    {
+                    }
+                ]
+            },
+            {
                 "name": "CNM",
                 "header": "AF20050D",
                 "description": "Compact Navigation Message (High Rate)",	
@@ -117,7 +257,7 @@
                     },
                     {
                         "type" : "float",
-                        "name" : "Ellipsoidal height",
+                        "name" : "Ellipsoidal Height",
                         "unit" : "m"
                     },
                     {
@@ -249,130 +389,90 @@
                 ]
             },
             {
-                "name": "SSS",
-                "header": "AF200502",
-                "description": "Satellite Signal Strength.",
-                "var_num":{
-                    "comment": "type: var_num's type, idx: index of var_num in payload(bytearray), field_idx: begining idex of var filed in payload(json)",
-                    "type" : "uint8",
-                    "idx": 18,
-                    "field_idx": 5
-                },
+                "name": "TSM",
+                "header": "AF200510",
+                "description": "This message contains the time sync message between the system time and GPS time. It gets generated at every PPS event. The GPS time corresponding to the system time can be obtained by 'GPS time = System computer time - Bias'.",
                 "payload" : [
                     {
                         "type" : "double",
-                        "name" : "System time",
+                        "name" : "System computer time",
                         "unit" : "s"
                     },
                     {
                         "type" : "double",
-                        "name" : "GPS time",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "uint8",
-                        "name" : "Receiver_ID",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "uint8",
-                        "name" : "Antenna_ID",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "uint8",
-                        "name" : "N_SV",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "uint8",
-                        "name" : "SV_system",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "uint8",
-                        "name" : "SVID",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "float",
-                        "name" : "L1CN0",
-                        "unit" : "dB-Hz"
-                    },
-                    {
-                        "type" : "float",
-                        "name" : "L2CN0",
-                        "unit" : "dB-Hz"
-                    }
-                ],
-                "graphs" : [
-                    { 
-                    },
-                    {
+                        "name" : "Bias with respect to GPS time",
+                        "unit" : "s"
                     }
                 ]
             },
             {
-                "name": "GSVM",
-                "header": "AF20050A",
-                "description": "Repackaged GSV Message.",
-                "var_num":{
-                    "comment": "type: var_num's type, idx: index of var_num in payload(bytearray), field_idx: begining idex of var filed in payload(json)",
-                    "type" : "uint8",
-                    "idx": 11,
-                    "field_idx": 5
-                },
+                "name": "EV",
+                "header": "AF200512",
+                "description": "Engine Version Message.This message shows the engine version of the system.",
                 "payload" : [
                     {
-                        "type" : "double",
-                        "name" : "System time",
-                        "unit" : "s"
-                    },
-                    {
-                        "type" : "uint8",
-                        "name" : "Receiver_number",
+                        "type" : "string",
+                        "name" : "Engine version",
                         "unit" : ""
-                    },
+                    }
+                ]
+            },
+            {
+                "name": "SA",
+                "header": "AF200701",
+                "description": "Sensor Activity.This message indicates the activity of each sub-system thus it can be used to monitor the system.",
+                "payload" : [
                     {
-                        "type" : "uint8",
-                        "name" : "Antenna_ID",
+                        "type" : "uint16",
+                        "name" : "IMU message count",
                         "unit" : ""
-                    },
-                    {
-                        "type" : "uint8",
-                        "name" : "SV_system",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "uint8",
-                        "name" : "N_SV",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "uint8",
-                        "name" : "SVID",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "uint8",
-                        "name" : "Elevation",
-                        "unit" : "deg"
                     },
                     {
                         "type" : "uint16",
-                        "name" : "Azimuth",
-                        "unit" : "deg"
+                        "name" : "GNSS message count",
+                        "unit" : ""
                     },
                     {
-                        "type" : "uint8",
-                        "name" : "SNR",
-                        "unit" : "db-Hz"
+                        "type" : "uint16",
+                        "name" : "PPS count",
+                        "unit" : ""
+                    },
+                    {
+                        "type" : "uint16",
+                        "name" : "Lidar Status",
+                        "unit" : ""
+                    },
+                    {
+                        "type" : "uint16",
+                        "name" : "Radar Status",
+                        "unit" : ""
+                    },
+                    {
+                        "type" : "uint16",
+                        "name" : "Camera Status",
+                        "unit" : ""
+                    },
+                    {
+                        "type" : "uint16",
+                        "name" : "Reserved1",
+                        "unit" : ""
+                    },
+                    {
+                        "type" : "uint16",
+                        "name" : "Reserved2",
+                        "unit" : ""
                     }
-                ],
-                "graphs" : [
-                    { 
-                    },
+                ]
+            },
+            {
+                "name": "NCA",
+                "header": "AF200702",
+                "description": "NTRIP Client Activity.This message indicates the activity of the NTRIP client receiving data.",
+                "payload" : [
                     {
+                        "type" : "uint16",
+                        "name" : "NTRIP message size",
+                        "unit" : ""
                     }
                 ]
             }
