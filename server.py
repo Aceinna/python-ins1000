@@ -14,11 +14,7 @@ import file_storage
 
 
 class WSHandler(tornado.websocket.WebSocketHandler):
-
-    def __init__(self, *args, **kwargs):
-        tornado.websocket.WebSocketHandler.__init__(self, *args, **kwargs)
-        self.users=[]
-        
+    users=[]
     def open(self):
         self.users.append(self)
         data_receiver.b_have_client = True
@@ -37,7 +33,7 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                 self.write_message(json_msg)
             data_receiver.all_GSVM_packets = []
         data_lock.release()
-
+        print(len(self.users) )
     def on_message(self, message):
         message = json.loads(message)
         if message['messageType'] != 'serverStatus':
@@ -52,7 +48,7 @@ class WSHandler(tornado.websocket.WebSocketHandler):
             data_receiver.latest_packets.clear()
             data_receiver.all_GSVM_packets = []
         data_lock.release()
-
+        print(len(self.users) )
         return False
 
     def check_origin(self, origin):
@@ -74,16 +70,16 @@ class DataReceiver(rover_application_base.RoverApplicationBase):
         pass
 
     def on_message(self, *args):
-
         data_lock.acquire()
         packet_type = args[0]
         data = args[1]
         is_var_len_frame = args[2]
         # print('[{0}]:{1}'.format(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S'), packet_type))
-        if packet_type == 'GSVM':
-            self.all_GSVM_packets.append(data)
-        else:
-            self.latest_packets[packet_type] = data
+        if self.b_have_client:
+            if packet_type == 'GSVM':
+                self.all_GSVM_packets.append(data)
+            else:
+                self.latest_packets[packet_type] = data
 
         if is_var_len_frame:
             rover_log.log_var_len(data, packet_type)
