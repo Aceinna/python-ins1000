@@ -92,8 +92,7 @@ class RoverDriver:
         ''' get serial data from data_queue and parse data into one whole frame.
             return when occur SerialException in thread receiver.
         '''
-        HEADER_05 = [0XAF, 0X20, 0X05]
-        HEADER_07 = [0XAF, 0X20, 0X07]
+        HEADER = [0XAF, 0X20, 0X05]
         PAYLOAD_LEN_IDX = 4
         MSG_SUB_ID_IDX = 3
         MAX_FRAME_LIMIT = 500  # assume max len of frame is smaller than MAX_FRAME_LIMIT.
@@ -140,16 +139,11 @@ class RoverDriver:
                         find_header = False
                         payload_len = 0
 
-                else:  # if haven't found header [0XAF, 0X20, 0X05] or [0XAF, 0X20, 0X07].
+                else:  # if haven't found header [0XAF, 0X20, 0X05].
                     sync_pattern.append(data)
-                    if operator.eq(list(sync_pattern), HEADER_05):
-                        frame = HEADER_05[:]  # header_tp.copy()
+                    if operator.eq(list(sync_pattern), HEADER):
+                        frame = HEADER[:]  # header_tp.copy()
                         find_header = True
-                    elif operator.eq(list(sync_pattern), HEADER_07):
-                        frame = HEADER_07[:]  # header_tp.copy()
-                        find_header = True
-                    else:
-                        pass
 
     def handle_KeyboardInterrupt(self):
         ''' handle KeyboardInterrupt.
@@ -347,7 +341,7 @@ class RoverDriver:
             return False
 
     def find_header(self, data):
-        if data.find((b'\xAF\x20\x05')) > -1 or data.find((b'\xAF\x20\x07')) > -1:  # if find the header "0XAF 0X20 0X05"
+        if data.find((b'\xAF\x20\x05')) > -1:  # if find the header "0XAF 0X20 0X05"
             return True
         return False
 
@@ -398,7 +392,7 @@ class RoverDriver:
                 # print('[{0}]:unpack_output_packet_var_len cost:{1}'.format(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S'), time_end-time_start))
                 pass
             else:
-                data = self.unpack_output_packet(output_packet, payload, payload_len)
+                data = self.unpack_output_packet(output_packet, payload)
                 self.change_scale(output_packet, data)
             if data:
                 self.app.on_message(output_packet['name'], data, is_var_len_frame)
@@ -406,26 +400,11 @@ class RoverDriver:
             data = self.unpack_input_packet(input_packet['responsePayload'], payload) 
         return data
 
-    def handel_string_filed(self, value, payload, string_len):
-        '''
-            handel_string_filed is used to parse one type of message which Payload is only one string field, 
-            such as message 5.18(handel_string_filed) and 6.1(handel_string_filed).
-        '''
-        pack_fmt = string_len*'c'
-        len_fmt = '{0}B'.format(string_len)
-        b = struct.pack(len_fmt, *payload)
-        data = struct.unpack(pack_fmt, b)
-        out = [(value['name'], b.decode())] # bytes to string
-        data = collections.OrderedDict(out)
-        return data
-
-    def unpack_output_packet(self, output_message, payload, payload_len):
+    def unpack_output_packet(self, output_message, payload):
         length = 0
         pack_fmt = '<'
         for value in output_message['payload']:
-            if value['type'] == 'string':
-                return self.handel_string_filed(value, payload, payload_len)
-            elif value['type'] == 'float':
+            if value['type'] == 'float':
                 pack_fmt += 'f'
                 length += 4
             elif value['type'] == 'uint32':
@@ -568,9 +547,8 @@ class RoverDriver:
         for idx, value in enumerate(field_names):
             if idx < const_fileld_num:
                 info[value] = payload_data[idx]
-                if idx == const_fileld_num-1:
-                    data.append(info.copy())
-                    info.clear()
+                data.append(info.copy())
+                info.clear()
             else:
                 info[value] = payload_data[idx]
                 if len(info) == var_fileld_num:
@@ -578,7 +556,6 @@ class RoverDriver:
                     info.clear()
 
         # print (json.dumps(data))
-        # print("***************")
         return data
 
     def change_scale(self, output_message, data):
