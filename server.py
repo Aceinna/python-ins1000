@@ -33,7 +33,7 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                 self.write_message(json_msg)
             data_receiver.all_GSVM_packets = []
         data_lock.release()
-        print(len(self.users) )
+
     def on_message(self, message):
         message = json.loads(message)
         if message['messageType'] != 'serverStatus':
@@ -48,7 +48,6 @@ class WSHandler(tornado.websocket.WebSocketHandler):
             data_receiver.latest_packets.clear()
             data_receiver.all_GSVM_packets = []
         data_lock.release()
-        print(len(self.users) )
         return False
 
     def check_origin(self, origin):
