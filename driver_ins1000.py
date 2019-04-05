@@ -22,6 +22,7 @@ try:
     from queue import Queue  # python3
 except ImportError:
     from Queue import Queue  # python2
+import utility
 
 
 class RoverDriver:
@@ -38,8 +39,8 @@ class RoverDriver:
         self.data_lock = threading.Lock()  # lock of data_queue
         self.setting_folder = os.path.join(os.getcwd(), r'setting')  # use to store some configuration files.
         self.connection_file = os.path.join(self.setting_folder, 'connection.json')
-        self.rover_file = os.path.join(self.setting_folder, 'rover.json')
-        if not self.load_configuration():
+        self.rover_properties = utility.load_configuration(os.path.join(self.setting_folder, 'rover.json'))
+        if not self.rover_properties:
             os._exit(1)
         print('Rover driver start at:{0}'.format(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
 
@@ -73,7 +74,7 @@ class RoverDriver:
             try:
                 serial_data = bytearray(self.ser.read(100))
             except serial.SerialException:
-                print('serial exception')
+                print('Serial Exception! Please check the serial port connector is stable or not.')
                 self.exit_lock.acquire()
                 self.exit_thread = True  # Notice thread paser to exit.
                 self.exit_lock.release()
@@ -140,7 +141,7 @@ class RoverDriver:
                         find_header = False
                         payload_len = 0
 
-                else:  # if haven't found header [0XAF, 0X20, 0X05] or [0XAF, 0X20, 0X07].
+                else:  # if hasn't found header [0XAF, 0X20, 0X05] or [0XAF, 0X20, 0X07].
                     sync_pattern.append(data)
                     if operator.eq(list(sync_pattern), HEADER_05):
                         frame = HEADER_05[:]  # header_tp.copy()
@@ -229,15 +230,6 @@ class RoverDriver:
             return True
         except KeyboardInterrupt:  # response for KeyboardInterrupt such as Ctrl+C
             print('User stop this program by KeyboardInterrupt! File:[{0}], Line:[{1}]'.format(__file__, sys._getframe().f_lineno))
-
-        # if self.try_last_port():
-        #     pass
-        # else:
-        #     while not self.autobaud(self.find_ports()):
-        #         time.sleep(0.1)
-
-        # self.app.on_find_active_rover()
-        # return True
 
     def find_ports(self):
         ''' Lists serial port names. Code from
@@ -331,25 +323,9 @@ class RoverDriver:
         except:
             pass
 
-    def load_configuration(self):
-        '''
-        load properties from 'rover.json'
-        returns: True when load successfully.
-                 False when load failed.
-        '''
-        try:
-            with open(self.rover_file) as json_data:
-                self.rover_properties = json.load(json_data)
-            return True
-        # except (ValueError, KeyError, TypeError) as error:
-        except Exception as e:
-            print(e)
-            return False
-
     def find_header(self, data):
-        if data.find((b'\xAF\x20\x05')) > -1 or data.find((b'\xAF\x20\x07')) > -1:  # if find the header "0XAF 0X20 0X05"
-            return True
-        return False
+        rev = True if data.find((b'\xAF\x20\x05')) > -1 or data.find((b'\xAF\x20\x07')) > -1 else False
+        return rev
 
     def check_sum(self, data):
         ''' Calculate the checksum
@@ -378,7 +354,7 @@ class RoverDriver:
         header = ''.join(["%02X" % x for x in frame[0:PAYLOAD_LEN_IDX]]).strip()
         data = []
 
-        # Find the packet in the imu_properties from unit's JSON description
+        # Find the packet properties from Rover's JSON description
         output_packet = next((x for x in self.rover_properties['userMessages']['outputPackets'] if x['header'] == header), None)
         input_packet = next((x for x in self.rover_properties['userMessages']['inputPackets'] if x['header'] == header), None)
 

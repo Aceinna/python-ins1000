@@ -1,481 +1,642 @@
 {
-    "name" : "Rover",
-    "type" : "Rover",
-    "description" : "Rover",
-    "userConfiguration" : [],
-    "userMessages" :
-	{ 
-         "inputPackets" : [],
-         "outputPackets" : [
-            {
-                "name": "KFN",
-                "header": "AF200501",
-                "description": "Kalman Filter Navigation Message",	
-				"payload" : [
-                    {
-                        "type" : "double",
-                        "name" : "System time",
-                        "unit" : "s"
-                    },
-                    {
-                        "type" : "double",
-                        "name" : "GPS time",
-                        "unit" : "s"
-                    },
-                    {
-                        "type" : "double",
-                        "name" : "Latitude",
-                        "unit" : "deg",
-                        "Scaling":"180/math.pi"
-                    },
-                    {
-                        "type" : "double",
-                        "name" : "Longitude",
-                        "unit" : "deg",
-                        "Scaling":"180/math.pi"
-                    },
-                    {
-                        "type" : "double",
-                        "name" : "Altitude",
-                        "unit" : "m"
-                    },
-                    {
-                        "type" : "double",
-                        "name" : "Velocity_N",
-                        "unit" : "m/s"
-                    },
-                    {
-                        "type" : "double",
-                        "name" : "Velocity_E",
-                        "unit" : "m/s"
-                    },
-                    {
-                        "type" : "double",
-                        "name" : "Velocity_D",
-                        "unit" : "m/s"
-                    },
-                    {
-                        "type" : "double",
-                        "name" : "Roll",
-                        "unit" : "deg",
-                        "Scaling":"180/math.pi"
-                    },
-                    {
-                        "type" : "double",
-                        "name" : "Pitch",
-                        "unit" : "deg",
-                        "Scaling":"180/math.pi"
-                    },
-                    {
-                        "type" : "double",
-                        "name" : "Heading",
-                        "unit" : "deg",
-                        "Scaling":"180/math.pi"
-                    },
-                    {
-                        "type" : "uint8",
-                        "name" : "Position mode",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "uint8",
-                        "name" : "Velocity mode",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "uint8",
-                        "name" : "Attitude status",
-                        "unit" : ""
-                    }
-                ],
-                "graphs" : [
-                    { 
-                    },
-                    {
-                    }
-                ]
-            },
-            {
-                "name": "SSS",
-                "header": "AF200502",
-                "description": "Satellite Signal Strength.",
-                "var_num":{
-                    "comment": "type: var_num's type, idx: index of var_num in payload(bytearray), field_idx: begining idex of var filed in payload(json)",
-                    "type" : "uint8",
-                    "idx": 18,
-                    "field_idx": 5
-                },
-                "payload" : [
-                    {
-                        "type" : "double",
-                        "name" : "System time",
-                        "unit" : "s"
-                    },
-                    {
-                        "type" : "double",
-                        "name" : "GPS time",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "uint8",
-                        "name" : "Receiver_ID",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "uint8",
-                        "name" : "Antenna_ID",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "uint8",
-                        "name" : "N_SV",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "uint8",
-                        "name" : "SV_system",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "uint8",
-                        "name" : "SVID",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "float",
-                        "name" : "L1CN0",
-                        "unit" : "dB-Hz"
-                    },
-                    {
-                        "type" : "float",
-                        "name" : "L2CN0",
-                        "unit" : "dB-Hz"
-                    }
-                ],
-                "graphs" : [
-                    { 
-                    },
-                    {
-                    }
-                ]
-            },
-            {
-                "name": "PID",
-                "header": "AF200506",
-                "description": "Product ID Message.This message contains the identification number of the product. To receive this message send the message defined in Section 8.1.",
-                "payload" : [
-                    {
-                        "type" : "uint16",
-                        "name" : "Product ID",
-                        "unit" : ""
-                    }
-                ]
-            },
-            {
-                "name": "GSVM",
-                "header": "AF20050A",
-                "description": "Repackaged GSV Message.",
-                "var_num":{
-                    "comment": "type: var_num's type, idx: index of var_num in payload(bytearray), field_idx: begining idex of var filed in payload(json)",
-                    "type" : "uint8",
-                    "idx": 11,
-                    "field_idx": 5
-                },
-                "payload" : [
-                    {
-                        "type" : "double",
-                        "name" : "System time",
-                        "unit" : "s"
-                    },
-                    {
-                        "type" : "uint8",
-                        "name" : "Receiver_number",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "uint8",
-                        "name" : "Antenna_ID",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "uint8",
-                        "name" : "SV_system",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "uint8",
-                        "name" : "N_SV",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "uint8",
-                        "name" : "SVID",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "uint8",
-                        "name" : "Elevation",
-                        "unit" : "deg"
-                    },
-                    {
-                        "type" : "uint16",
-                        "name" : "Azimuth",
-                        "unit" : "deg"
-                    },
-                    {
-                        "type" : "uint8",
-                        "name" : "SNR",
-                        "unit" : "db-Hz"
-                    }
-                ],
-                "graphs" : [
-                    { 
-                    },
-                    {
-                    }
-                ]
-            },
-            {
-                "name": "CNM",
-                "header": "AF20050D",
-                "description": "Compact Navigation Message (High Rate)",	
-                "payload" : [
-                    {
-                        "type" : "double",
-                        "name" : "System time",
-                        "unit" : "s"
-                    },
-                    {
-                        "type" : "double",
-                        "name" : "Latitude",
-                        "unit" : "deg"
-                    },
-                    {
-                        "type" : "double",
-                        "name" : "Longitude",
-                        "unit" : "deg"
-                    },
-                    {
-                        "type" : "float",
-                        "name" : "Ellipsoidal Height",
-                        "unit" : "m"
-                    },
-                    {
-                        "type" : "float",
-                        "name" : "Velocity_N",
-                        "unit" : "m/s"
-                    },
-                    {
-                        "type" : "float",
-                        "name" : "Velocity_E",
-                        "unit" : "m/s"
-                    },
-                    {
-                        "type" : "float",
-                        "name" : "Velocity_D",
-                        "unit" : "m/s"
-                    },
-                    {
-                        "type" : "float",
-                        "name" : "Attitude quaternion-Scalar",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "float",
-                        "name" : "Attitude quaternion-X",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "float",
-                        "name" : "Attitude quaternion-Y",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "float",
-                        "name" : "Attitude quaternion-Z",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "float",
-                        "name" : "Accel in body frame-X",
-                        "unit" : "m/s^2"
-                    },
-                    {
-                        "type" : "float",
-                        "name" : "Accel in body frame-Y",
-                        "unit" : "m/s^2"
-                    },
-                    {
-                        "type" : "float",
-                        "name" : "Accel in body frame-Z",
-                        "unit" : "m/s^2"
-                    },
-                    {
-                        "type" : "float",
-                        "name" : "Gyro in body frame-X",
-                        "unit" : "deg/s"
-                    },
-                    {
-                        "type" : "float",
-                        "name" : "Gyro in body frame-Y",
-                        "unit" : "deg/s"
-                    },
-                    {
-                        "type" : "float",
-                        "name" : "Gyro in body frame-Z",
-                        "unit" : "deg/s"
-                    },
-                    {
-                        "type" : "float",
-                        "name" : "Position RMS-N",
-                        "unit" : "m"
-                    },
-                    {
-                        "type" : "float",
-                        "name" : "Position RMS-E",
-                        "unit" : "m"
-                    },
-                    {
-                        "type" : "float",
-                        "name" : "Position RMS-D",
-                        "unit" : "m"
-                    },
-                    {
-                        "type" : "float",
-                        "name" : "Velocity RMS-N",
-                        "unit" : "m/s"
-                    },
-                    {
-                        "type" : "float",
-                        "name" : "Velocity RMS-E",
-                        "unit" : "m/s"
-                    },
-                    {
-                        "type" : "float",
-                        "name" : "Velocity RMS-D",
-                        "unit" : "m/s"
-                    },
-                    {
-                        "type" : "float",
-                        "name" : "Attitude RMS-N",
-                        "unit" : "deg"
-                    },
-                    {
-                        "type" : "float",
-                        "name" : "Attitude RMS-E",
-                        "unit" : "deg"
-                    },
-                    {
-                        "type" : "float",
-                        "name" : "Attitude RMS-D",
-                        "unit" : "deg"
-                    },
-                    {
-                        "type" : "uint16",
-                        "name" : "GPS week number",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "uint8",
-                        "name" : "Alignment status",
-                        "unit" : ""
-                    }
-                ],
-                "graphs" : [
-                    { 
-                    },
-                    {
-                    }
-                ]
-            },
-            {
-                "name": "TSM",
-                "header": "AF200510",
-                "description": "This message contains the time sync message between the system time and GPS time. It gets generated at every PPS event. The GPS time corresponding to the system time can be obtained by 'GPS time = System computer time - Bias'.",
-                "payload" : [
-                    {
-                        "type" : "double",
-                        "name" : "System computer time",
-                        "unit" : "s"
-                    },
-                    {
-                        "type" : "double",
-                        "name" : "Bias with respect to GPS time",
-                        "unit" : "s"
-                    }
-                ]
-            },
-            {
-                "name": "EV",
-                "header": "AF200512",
-                "description": "Engine Version Message.This message shows the engine version of the system.",
-                "payload" : [
-                    {
-                        "type" : "string",
-                        "name" : "Engine version",
-                        "unit" : ""
-                    }
-                ]
-            },
-            {
-                "name": "SA",
-                "header": "AF200701",
-                "description": "Sensor Activity.This message indicates the activity of each sub-system thus it can be used to monitor the system.",
-                "payload" : [
-                    {
-                        "type" : "uint16",
-                        "name" : "IMU message count",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "uint16",
-                        "name" : "GNSS message count",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "uint16",
-                        "name" : "PPS count",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "uint16",
-                        "name" : "Lidar Status",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "uint16",
-                        "name" : "Radar Status",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "uint16",
-                        "name" : "Camera Status",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "uint16",
-                        "name" : "Reserved1",
-                        "unit" : ""
-                    },
-                    {
-                        "type" : "uint16",
-                        "name" : "Reserved2",
-                        "unit" : ""
-                    }
-                ]
-            },
-            {
-                "name": "NCA",
-                "header": "AF200702",
-                "description": "NTRIP Client Activity.This message indicates the activity of the NTRIP client receiving data.",
-                "payload" : [
-                    {
-                        "type" : "uint16",
-                        "name" : "NTRIP message size",
-                        "unit" : ""
-                    }
-                ]
-            }
-        ] 
-    }
+  "name": "Rover",
+  "type": "Rover",
+  "description": "Rover",
+  "userConfiguration": [],
+  "userMessages": {
+    "inputPackets": [],
+    "outputPackets": [
+      {
+        "name": "KFN",
+        "header": "AF200501",
+        "description": "Kalman Filter Navigation Message",
+        "save2file": 1,
+        "send2web": 0,
+        "payload": [
+          {
+            "type": "double",
+            "name": "System time",
+            "unit": "s"
+          },
+          {
+            "type": "double",
+            "name": "GPS time",
+            "unit": "s"
+          },
+          {
+            "type": "double",
+            "name": "Latitude",
+            "unit": "deg",
+            "Scaling": "180/math.pi"
+          },
+          {
+            "type": "double",
+            "name": "Longitude",
+            "unit": "deg",
+            "Scaling": "180/math.pi"
+          },
+          {
+            "type": "double",
+            "name": "Ellipsoidal height",
+            "unit": "m"
+          },
+          {
+            "type": "double",
+            "name": "Velocity_N",
+            "unit": "m/s"
+          },
+          {
+            "type": "double",
+            "name": "Velocity_E",
+            "unit": "m/s"
+          },
+          {
+            "type": "double",
+            "name": "Velocity_D",
+            "unit": "m/s"
+          },
+          {
+            "type": "double",
+            "name": "Roll",
+            "unit": "deg",
+            "Scaling": "180/math.pi"
+          },
+          {
+            "type": "double",
+            "name": "Pitch",
+            "unit": "deg",
+            "Scaling": "180/math.pi"
+          },
+          {
+            "type": "double",
+            "name": "Heading",
+            "unit": "deg",
+            "Scaling": "180/math.pi"
+          },
+          {
+            "type": "uint8",
+            "name": "Position mode",
+            "unit": ""
+          },
+          {
+            "type": "uint8",
+            "name": "Velocity mode",
+            "unit": ""
+          },
+          {
+            "type": "uint8",
+            "name": "Attitude status",
+            "unit": ""
+          }
+        ]
+      },
+      {
+        "name": "SSS",
+        "header": "AF200502",
+        "description": "Satellite Signal Strength.",
+        "save2file": 1,
+        "send2web": 1,
+        "var_num": {
+          "comment": "type: var_num's type, idx: index of var_num in payload(bytearray), field_idx: begining idex of var filed in payload(json)",
+          "type": "uint8",
+          "idx": 18,
+          "field_idx": 5
+        },
+        "payload": [
+          {
+            "type": "double",
+            "name": "System time",
+            "unit": "s"
+          },
+          {
+            "type": "double",
+            "name": "GPS time",
+            "unit": ""
+          },
+          {
+            "type": "uint8",
+            "name": "Receiver_ID",
+            "unit": ""
+          },
+          {
+            "type": "uint8",
+            "name": "Antenna_ID",
+            "unit": ""
+          },
+          {
+            "type": "uint8",
+            "name": "N_SV",
+            "unit": ""
+          },
+          {
+            "type": "uint8",
+            "name": "SV_system",
+            "unit": ""
+          },
+          {
+            "type": "uint8",
+            "name": "SVID",
+            "unit": ""
+          },
+          {
+            "type": "float",
+            "name": "L1CN0",
+            "unit": "dB-Hz"
+          },
+          {
+            "type": "float",
+            "name": "L2CN0",
+            "unit": "dB-Hz"
+          }
+        ]
+      },
+      {
+        "name": "PID",
+        "header": "AF200506",
+        "description": "Product ID Message.This message contains the identification number of the product. To receive this message send the message defined in Section 8.1.",
+        "save2file": 0,
+        "send2web": 1,
+        "payload": [
+          {
+            "type": "uint16",
+            "name": "Product ID",
+            "unit": ""
+          }
+        ]
+      },
+      {
+        "name": "GSVM",
+        "header": "AF20050A",
+        "description": "Repackaged GSV Message.",
+        "save2file": 1,
+        "send2web": 1,
+        "var_num": {
+          "comment": "type: var_num's type, idx: index of var_num in payload(bytearray), field_idx: begining idex of var filed in payload(json)",
+          "type": "uint8",
+          "idx": 11,
+          "field_idx": 5
+        },
+        "payload": [
+          {
+            "type": "double",
+            "name": "System time",
+            "unit": "s"
+          },
+          {
+            "type": "uint8",
+            "name": "Receiver_number",
+            "unit": ""
+          },
+          {
+            "type": "uint8",
+            "name": "Antenna_ID",
+            "unit": ""
+          },
+          {
+            "type": "uint8",
+            "name": "SV_system",
+            "unit": ""
+          },
+          {
+            "type": "uint8",
+            "name": "N_SV",
+            "unit": ""
+          },
+          {
+            "type": "uint8",
+            "name": "SVID",
+            "unit": ""
+          },
+          {
+            "type": "uint8",
+            "name": "Elevation",
+            "unit": "deg"
+          },
+          {
+            "type": "uint16",
+            "name": "Azimuth",
+            "unit": "deg"
+          },
+          {
+            "type": "uint8",
+            "name": "SNR",
+            "unit": "db-Hz"
+          }
+        ]
+      },
+      {
+        "name": "CNM",
+        "header": "AF20050D",
+        "description": "Compact Navigation Message (High Rate)",
+        "save2file": 1,
+        "send2web": 0,
+        "payload": [
+          {
+            "type": "double",
+            "name": "System time",
+            "unit": "s"
+          },
+          {
+            "type": "double",
+            "name": "Latitude",
+            "unit": "deg"
+          },
+          {
+            "type": "double",
+            "name": "Longitude",
+            "unit": "deg"
+          },
+          {
+            "type": "float",
+            "name": "Ellipsoidal Height",
+            "unit": "m"
+          },
+          {
+            "type": "float",
+            "name": "Velocity_N",
+            "unit": "m/s"
+          },
+          {
+            "type": "float",
+            "name": "Velocity_E",
+            "unit": "m/s"
+          },
+          {
+            "type": "float",
+            "name": "Velocity_D",
+            "unit": "m/s"
+          },
+          {
+            "type": "float",
+            "name": "Attitude quaternion-Scalar",
+            "unit": ""
+          },
+          {
+            "type": "float",
+            "name": "Attitude quaternion-X",
+            "unit": ""
+          },
+          {
+            "type": "float",
+            "name": "Attitude quaternion-Y",
+            "unit": ""
+          },
+          {
+            "type": "float",
+            "name": "Attitude quaternion-Z",
+            "unit": ""
+          },
+          {
+            "type": "float",
+            "name": "Accel in body frame-X",
+            "unit": "m/s^2"
+          },
+          {
+            "type": "float",
+            "name": "Accel in body frame-Y",
+            "unit": "m/s^2"
+          },
+          {
+            "type": "float",
+            "name": "Accel in body frame-Z",
+            "unit": "m/s^2"
+          },
+          {
+            "type": "float",
+            "name": "Gyro in body frame-X",
+            "unit": "deg/s"
+          },
+          {
+            "type": "float",
+            "name": "Gyro in body frame-Y",
+            "unit": "deg/s"
+          },
+          {
+            "type": "float",
+            "name": "Gyro in body frame-Z",
+            "unit": "deg/s"
+          },
+          {
+            "type": "float",
+            "name": "Position RMS-N",
+            "unit": "m"
+          },
+          {
+            "type": "float",
+            "name": "Position RMS-E",
+            "unit": "m"
+          },
+          {
+            "type": "float",
+            "name": "Position RMS-D",
+            "unit": "m"
+          },
+          {
+            "type": "float",
+            "name": "Velocity RMS-N",
+            "unit": "m/s"
+          },
+          {
+            "type": "float",
+            "name": "Velocity RMS-E",
+            "unit": "m/s"
+          },
+          {
+            "type": "float",
+            "name": "Velocity RMS-D",
+            "unit": "m/s"
+          },
+          {
+            "type": "float",
+            "name": "Attitude RMS-N",
+            "unit": "deg"
+          },
+          {
+            "type": "float",
+            "name": "Attitude RMS-E",
+            "unit": "deg"
+          },
+          {
+            "type": "float",
+            "name": "Attitude RMS-D",
+            "unit": "deg"
+          },
+          {
+            "type": "uint16",
+            "name": "GPS week number",
+            "unit": ""
+          },
+          {
+            "type": "uint8",
+            "name": "Alignment status",
+            "unit": ""
+          }
+        ]
+      },
+      {
+        "name": "TSM",
+        "header": "AF200510",
+        "description": "This message contains the time sync message between the system time and GPS time. It gets generated at every PPS event. The GPS time corresponding to the system time can be obtained by 'GPS time = System computer time - Bias'.",
+        "save2file": 1,
+        "send2web": 0,
+        "payload": [
+          {
+            "type": "double",
+            "name": "System computer time",
+            "unit": "s"
+          },
+          {
+            "type": "double",
+            "name": "Bias with respect to GPS time",
+            "unit": "s"
+          }
+        ]
+      },
+      {
+        "name": "EV",
+        "header": "AF200512",
+        "description": "Engine Version Message.This message shows the engine version of the system.",
+        "save2file": 0,
+        "send2web": 1,
+        "payload": [
+          {
+            "type": "string",
+            "name": "Engine version",
+            "unit": ""
+          }
+        ]
+      },
+      {
+        "name": "GH",
+        "header": "AF200516",
+        "description": "Geoid Height",
+        "save2file": 0,
+        "send2web": 1,
+        "payload": [
+          {
+            "type": "double",
+            "name": "GPS time",
+            "unit": "s"
+          },
+          {
+            "type": "float",
+            "name": "Geoid height",
+            "unit": "m"
+          }
+        ]
+      },
+      {
+        "name": "SA",
+        "header": "AF200701",
+        "description": "Sensor Activity.This message indicates the activity of each sub-system thus it can be used to monitor the system.",
+        "save2file": 0,
+        "send2web": 1,
+        "payload": [
+          {
+            "type": "uint16",
+            "name": "IMU message count",
+            "unit": ""
+          },
+          {
+            "type": "uint16",
+            "name": "GNSS message count",
+            "unit": ""
+          },
+          {
+            "type": "uint16",
+            "name": "PPS count",
+            "unit": ""
+          },
+          {
+            "type": "uint16",
+            "name": "Lidar Status",
+            "unit": ""
+          },
+          {
+            "type": "uint16",
+            "name": "Radar Status",
+            "unit": ""
+          },
+          {
+            "type": "uint16",
+            "name": "Camera Status",
+            "unit": ""
+          },
+          {
+            "type": "uint16",
+            "name": "Reserved1",
+            "unit": ""
+          },
+          {
+            "type": "uint16",
+            "name": "Reserved2",
+            "unit": ""
+          }
+        ]
+      },
+      {
+        "name": "NCA",
+        "header": "AF200702",
+        "description": "NTRIP Client Activity.This message indicates the activity of the NTRIP client receiving data.",
+        "save2file": 0,
+        "send2web": 1,
+        "payload": [
+          {
+            "type": "uint16",
+            "name": "NTRIP message size",
+            "unit": ""
+          }
+        ]
+      },
+      {
+        "name": "NAV",
+        "header": "NONE",
+        "description": "Navigation information message. This message is orgnized based on 'CNM', 'KFN' and 'GH' packages.",
+        "save2file": 1,
+        "send2web": 1,
+        "payload": [
+          {
+            "type": "double",
+            "name": "System time",
+            "unit": "s"
+          },
+          {
+            "type": "double",
+            "name": "Latitude",
+            "unit": "deg"
+          },
+          {
+            "type": "double",
+            "name": "Longitude",
+            "unit": "deg"
+          },
+          {
+            "type": "float",
+            "name": "Ellipsoidal Height",
+            "unit": "m"
+          },
+          {
+            "type": "float",
+            "name": "Velocity_N",
+            "unit": "m/s"
+          },
+          {
+            "type": "float",
+            "name": "Velocity_E",
+            "unit": "m/s"
+          },
+          {
+            "type": "float",
+            "name": "Velocity_D",
+            "unit": "m/s"
+          },
+          {
+            "type": "float",
+            "name": "Attitude quaternion-Scalar",
+            "unit": ""
+          },
+          {
+            "type": "float",
+            "name": "Attitude quaternion-X",
+            "unit": ""
+          },
+          {
+            "type": "float",
+            "name": "Attitude quaternion-Y",
+            "unit": ""
+          },
+          {
+            "type": "float",
+            "name": "Attitude quaternion-Z",
+            "unit": ""
+          },
+          {
+            "type": "float",
+            "name": "Accel in body frame-X",
+            "unit": "m/s^2"
+          },
+          {
+            "type": "float",
+            "name": "Accel in body frame-Y",
+            "unit": "m/s^2"
+          },
+          {
+            "type": "float",
+            "name": "Accel in body frame-Z",
+            "unit": "m/s^2"
+          },
+          {
+            "type": "float",
+            "name": "Gyro in body frame-X",
+            "unit": "deg/s"
+          },
+          {
+            "type": "float",
+            "name": "Gyro in body frame-Y",
+            "unit": "deg/s"
+          },
+          {
+            "type": "float",
+            "name": "Gyro in body frame-Z",
+            "unit": "deg/s"
+          },
+          {
+            "type": "float",
+            "name": "Position RMS-N",
+            "unit": "m"
+          },
+          {
+            "type": "float",
+            "name": "Position RMS-E",
+            "unit": "m"
+          },
+          {
+            "type": "float",
+            "name": "Position RMS-D",
+            "unit": "m"
+          },
+          {
+            "type": "float",
+            "name": "Velocity RMS-N",
+            "unit": "m/s"
+          },
+          {
+            "type": "float",
+            "name": "Velocity RMS-E",
+            "unit": "m/s"
+          },
+          {
+            "type": "float",
+            "name": "Velocity RMS-D",
+            "unit": "m/s"
+          },
+          {
+            "type": "float",
+            "name": "Attitude RMS-N",
+            "unit": "deg"
+          },
+          {
+            "type": "float",
+            "name": "Attitude RMS-E",
+            "unit": "deg"
+          },
+          {
+            "type": "float",
+            "name": "Attitude RMS-D",
+            "unit": "deg"
+          },
+          {
+            "type": "uint16",
+            "name": "GPS week number",
+            "unit": ""
+          },
+          {
+            "type": "uint8",
+            "name": "Alignment status",
+            "unit": ""
+          }
+        ]
+      }
+    ]
+  }
 }

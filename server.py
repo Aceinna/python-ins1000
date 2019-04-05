@@ -12,6 +12,7 @@ import json
 import rover_application_base
 import driver_ins1000
 import file_storage
+import utility
 
 
 class WSHandler(tornado.websocket.WebSocketHandler):
@@ -32,8 +33,9 @@ class WSHandler(tornado.websocket.WebSocketHandler):
             for key in data_receiver.latest_packets:
                 json_msg = json.dumps({ 'messageType' : 'event',  'data' : {'packetType' : key, 'packet' : data_receiver.latest_packets[key] }})
                 self.write_message(json_msg)
-                # print(json_msg)
-                # print('************')
+                # if key == 'GH':
+                #     print(json_msg)
+                #     print('************')
             data_receiver.latest_packets.clear()
 
             for key in data_receiver.all_GSVM_packets:
@@ -73,6 +75,9 @@ class DataReceiver(rover_application_base.RoverApplicationBase):
         self.latest_packets = {}
         self.all_GSVM_packets = []
         self.b_have_client = False
+        self.rover_properties = utility.load_configuration(os.path.join('setting', 'rover.json'))
+        if not self.rover_properties:
+            os._exit(1)
         pass
 
     def on_reinit(self):
@@ -112,22 +117,13 @@ class DataReceiver(rover_application_base.RoverApplicationBase):
             else:
                 self.latest_packets[packet_type] = data
 
-        '''
-            Message which need to log to file:
-            1 KFN: Kalman Filter Navigation Message
-            2 SSS: Satellite Signal Strength
-            3 GSVM: Repackaged GSV Message
-            4 CNM: Compact Navigation Message (High Rate)
-            5 NAV: Navigation information.
-        '''
-        # if packet_type == 'KFN' or packet_type == 'SSS' \
-        # or packet_type == 'GSVM' or packet_type == 'CNM' \
-        # or packet_type == 'NAV':
-        if is_var_len_frame:
-            rover_log.log_var_len(data, packet_type)
-            # print (json.dumps(data))
-        else:
-            rover_log.log(data, packet_type)
+        # user could configure which msgs can be saved to file or not in rover.json.
+        if packet_type in rover_log.msgs_need_to_log:
+            if is_var_len_frame:
+                rover_log.log_var_len(data, packet_type)
+                # print (json.dumps(data))
+            else:
+                rover_log.log(data, packet_type)
         data_lock.release()
 
     def on_exit(self):
@@ -138,7 +134,8 @@ def driver_thread(driver):
     while True:
         try:
             driver.reinit()
-            driver.find_device()
+            if not driver.find_device():
+                break # exit when user trigger KeyboardInterrupt.
         except KeyboardInterrupt:  # response for KeyboardInterrupt such as Ctrl+C
             print('User stop this program by KeyboardInterrupt! File:[{0}], Line:[{1}]'.format(__file__, sys._getframe().f_lineno))
             break
@@ -148,7 +145,7 @@ def driver_thread(driver):
 
 if __name__ == '__main__':
     '''main'''
-    callback_rate = 1000
+    callback_rate = 150
     data_lock = threading.Lock()
 
     try:

@@ -10,6 +10,7 @@ import requests
 import threading
 from azure.storage.blob import AppendBlobService
 from azure.storage.blob import ContentSettings
+import utility
 
 
 class RoverLogApp(rover_application_base.RoverApplicationBase):
@@ -23,7 +24,8 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
             self.userAccessToken = user['startLog']['access_token']
 
         self.start_time = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-        if not self.load_configuration():
+        self.rover_properties = utility.load_configuration(os.path.join('setting', 'rover.json'))
+        if not self.rover_properties:
             os._exit(1)
         if not os.path.exists('data/'):
             os.mkdir('data/')
@@ -31,6 +33,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
         self.first_row = {}
         self.log_file_names = {}
         self.log_files = {}
+        self.msgs_need_to_log = []
 
         if user:
             with open('tempLogFiles.json', 'r') as outfile:
@@ -42,15 +45,17 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
                 json.dump({}, outfile)
             try:
                 for packet in self.output_packets:
+                    if 0 == packet['save2file']:
+                        continue
+                    else:
+                        self.msgs_need_to_log.append(packet['name'])
                     self.first_row[packet['name']] = 0
                     self.log_file_names[packet['name']] = packet['name'] +'-' + self.start_time + '.csv'
-                    self.log_files[packet['name']] = open('data/' + self.log_file_names[packet['name']], 'w')# just log Compact Navigation Message
+                    self.log_files[packet['name']] = open('data/' + self.log_file_names[packet['name']], 'w')
 
                     entry = {packet['name']:self.log_file_names[packet['name']]}
-
                     with open('tempLogFiles.json') as f:
                         data = json.load(f)
-
                     data.update(entry)
                     with open('tempLogFiles.json','w') as f:
                         json.dump(data, f)
@@ -93,21 +98,6 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
 
     def on_exit(self):
         pass
-
-    def load_configuration(self):
-        '''
-        load properties from 'rover.json'
-        returns: True when load successfully.
-                 False when load failed.
-        '''
-        try:
-            with open('setting/rover.json') as json_data:
-                self.rover_properties = json.load(json_data)
-            return True
-        # except (ValueError, KeyError, TypeError) as error:
-        except Exception as e:
-            print(e)
-            return False
 
     def log(self, data, packet_type):
         ''' Parse the data, read in from the unit, and generate a data file using
@@ -359,7 +349,8 @@ def main():
     while True:
         try:
             driver.reinit()
-            driver.find_device()
+            if not driver.find_device():
+                break # exit when user trigger KeyboardInterrupt.
         except KeyboardInterrupt:  # response for KeyboardInterrupt such as Ctrl+C
             print('User stop this program by KeyboardInterrupt! File:[{0}], Line:[{1}]'.format(__file__, sys._getframe().f_lineno))
             break
