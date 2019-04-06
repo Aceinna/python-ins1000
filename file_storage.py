@@ -45,10 +45,10 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
                 json.dump({}, outfile)
             try:
                 for packet in self.output_packets:
-                    if 0 == packet['save2file']:
-                        continue
-                    else:
+                    if 1 == packet['save2file']:
                         self.msgs_need_to_log.append(packet['name'])
+                    else:
+                        continue
                     self.first_row[packet['name']] = 0
                     self.log_file_names[packet['name']] = packet['name'] +'-' + self.start_time + '.csv'
                     self.log_files[packet['name']] = open('data/' + self.log_file_names[packet['name']], 'w')
@@ -91,10 +91,11 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
         packet_type = args[0]
         self.data = args[1]
         is_var_len_frame = args[2]
-        if is_var_len_frame:
-            self.log_var_len(self.data, packet_type)
-        else:
-            self.log(self.data, packet_type)
+        if packet_type in self.msgs_need_to_log:
+            if is_var_len_frame:
+                self.log_var_len(self.data, packet_type)
+            else:
+                self.log(self.data, packet_type)
 
     def on_exit(self):
         pass
@@ -117,15 +118,14 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
             # Loop through each item in the data dictionary and create a header from the json
             #   properties that correspond to the items in the dictionary
             labels = ''
-            keyIdx = -1
-            for key in data:
-                keyIdx= keyIdx + 1
-                '''dataStr = output_packet['payload'][keyIdx]['name'] + \
+            # for key in data:
+            for i, (k, v) in enumerate(data.items()):
+                '''dataStr = output_packet['payload'][i]['name'] + \
                           ' [' + \
-                          output_packet['payload'][keyIdx]['unit'] + \
+                          output_packet['payload'][i]['unit'] + \
                           ']'''
-                dataStr = output_packet['payload'][keyIdx]['name']
-                unitStr = output_packet['payload'][keyIdx]['unit']
+                dataStr = output_packet['payload'][i]['name']
+                unitStr = output_packet['payload'][i]['unit']
                 if unitStr == '':
                     labels = labels + '{0:s},'.format(dataStr)
                 else:
@@ -142,31 +142,28 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
         # Loop through the items in the data dictionary and append to an output string
         #   (with precision based on the data type defined in the json properties file)
         str = ''
-        keyIdx = -1
-        for key in data:
-            keyIdx= keyIdx + 1
-            outputPcktType = output_packet['payload'][keyIdx]['type']
+        for i, (k, v) in enumerate(data.items()):
+            outputPcktType = output_packet['payload'][i]['type']
 
             if outputPcktType == 'uint32' or outputPcktType == 'int32' or \
                outputPcktType == 'uint16' or outputPcktType == 'int16' or \
                outputPcktType == 'uint64' or outputPcktType == 'int64':
                 # integers and unsigned integers
-                str += '{0:d},'.format(data[key])
+                str += '{0:d},'.format(v)
             elif outputPcktType == 'double':
                 # double
-                str += '{0:15.12f},'.format(data[key])
+                str += '{0:15.12f},'.format(v)
             elif outputPcktType == 'float':
-                # print(3) #key + str(2))
-                str += '{0:12.8f},'.format(data[key])
+                str += '{0:12.8f},'.format(v)
             elif outputPcktType == 'uint8':
                 # byte
-                str += '{0:d},'.format(data[key])
+                str += '{0:d},'.format(v)
             elif outputPcktType == 'uchar' or outputPcktType == 'char' or outputPcktType == 'string':
                 # character
-                str += '{:},'.format(data[key])
+                str += '{:},'.format(v)
             else:
                 # unknown
-                str += '{0:3.5f},'.format(data[key])
+                str += '{0:3.5f},'.format(v)
         # 
         str = str[:-1]
         str = str + '\n'
@@ -273,7 +270,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
                 header = ''
                 str = ''
                 var_str = ''
-                # self.log_files[packet_type].flush()
+                self.log_files[packet_type].flush()
 
     ''' Upload CSV's to Azure container.
     '''

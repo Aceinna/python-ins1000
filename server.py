@@ -74,10 +74,17 @@ class DataReceiver(rover_application_base.RoverApplicationBase):
         '''
         self.latest_packets = {}
         self.all_GSVM_packets = []
+        self.msgs_send2web = []
         self.b_have_client = False
+
         self.rover_properties = utility.load_configuration(os.path.join('setting', 'rover.json'))
         if not self.rover_properties:
             os._exit(1)
+
+        self.output_packets = self.rover_properties['userMessages']['outputPackets']
+        for packet in self.output_packets:
+            if 1 == packet['send2web']:
+                self.msgs_send2web.append(packet['name'])
         pass
 
     def on_reinit(self):
@@ -99,21 +106,17 @@ class DataReceiver(rover_application_base.RoverApplicationBase):
             2. Message which need to send all to Web client.
                 2.1 SSS: Satellite Signal Strength
                 2.2 GSVM: Repackaged GSV Message
-            3. Message which need to be re-built then send to Web client.
-                3.1 KFN: Kalman Filter Navigation Message
-                3.2 CNM: Compact Navigation Message (High Rate)
-                3.3 Geoid Height.
+            3. Message which need to be re-packet then send to Web client.
+                3.1 Construct new 'NAV' packet based on KFN/CNM/GH then send to web client.
             4. Message which need to send to Web client at once when driver receives.
                 4.1 PID: Product ID Message.
                 4.2 EV: Engine Version Message.
             5. Message which needn't to send to Web client.
                 5.1 TSM: PPS info.
         '''
-        if self.b_have_client:
+        if self.b_have_client and packet_type in self.msgs_send2web:
             if packet_type == 'GSVM':
                 self.all_GSVM_packets.append(data)
-            # elif packet_type == 'CNM':
-            #     pass
             else:
                 self.latest_packets[packet_type] = data
 

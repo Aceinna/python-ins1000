@@ -37,6 +37,7 @@ class RoverDriver:
         self.exit_thread = False  # flag of exit threads
         self.exit_lock = threading.Lock()  # lock of exit_thread
         self.data_lock = threading.Lock()  # lock of data_queue
+        self.msgs = {} 
         self.setting_folder = os.path.join(os.getcwd(), r'setting')  # use to store some configuration files.
         self.connection_file = os.path.join(self.setting_folder, 'connection.json')
         self.rover_properties = utility.load_configuration(os.path.join(self.setting_folder, 'rover.json'))
@@ -55,6 +56,7 @@ class RoverDriver:
         self.exit_thread = False
         self.threads = []  # clear threads
         self.app.on_reinit()
+        self.msgs.clear()
 
     def set_app(self, app):
         self.app = app
@@ -378,8 +380,10 @@ class RoverDriver:
                 self.change_scale(output_packet, data)
             if data:
                 self.app.on_message(output_packet['name'], data, is_var_len_frame)
+                self.packet_handler(output_packet['name'], data, is_var_len_frame)
         elif input_packet:
-            data = self.unpack_input_packet(input_packet['responsePayload'], payload) 
+            # data = self.unpack_input_packet(input_packet['responsePayload'], payload)
+            pass 
         return data
 
     def handel_string_filed(self, value, payload, string_len):
@@ -575,6 +579,80 @@ class RoverDriver:
                 print(e)
                 return False
         return True
+
+    def packet_handler(self, packet_type, packet, is_var_len):
+        TP_KFN = 'KFN' # msg tpyt is KFN
+        TP_CNM = 'CNM'
+        TP_GH = 'GH'
+        TP_NAV = 'NAV'
+
+        # self.msgs is used to restore the newest packets.
+        if TP_KFN == packet_type:
+            self.msgs[TP_KFN] = packet
+        elif TP_CNM == packet_type:
+            self.msgs[TP_CNM] = packet
+        elif TP_GH == packet_type:
+            self.msgs[TP_GH] = packet
+        else:
+            pass
+
+        # make sure have received 'KFN', 'CNM' and 'GH' already before construct 'NAV'
+        if TP_KFN in self.msgs and TP_CNM in self.msgs and TP_GH in self.msgs:
+            r2d = 180/math.pi
+            pos_rms_n = self.msgs[TP_CNM]['Position RMS-N']
+            pos_rms_e = self.msgs[TP_CNM]['Position RMS-E']
+            pos_rms_d = self.msgs[TP_CNM]['Position RMS-D']
+            vel_rms_n = self.msgs[TP_CNM]['Velocity RMS-N']
+            vel_rms_e = self.msgs[TP_CNM]['Velocity RMS-E']
+            vel_rms_d = self.msgs[TP_CNM]['Velocity RMS-D']
+            att_rms_n = self.msgs[TP_CNM]['Attitude RMS-N']
+            att_rms_e = self.msgs[TP_CNM]['Attitude RMS-E']
+            att_rms_d = self.msgs[TP_CNM]['Attitude RMS-D']
+            q0 = self.msgs[TP_CNM]['Attitude quaternion-Scalar']
+            q1 = self.msgs[TP_CNM]['Attitude quaternion-X']
+            q2 = self.msgs[TP_CNM]['Attitude quaternion-Y']
+            q3 = self.msgs[TP_CNM]['Attitude quaternion-Z']
+            euler_angle = utility.cal_attitude(q0, q1, q2, q3)
+
+            nav = collections.OrderedDict()
+            nav['System time'] = self.msgs[TP_CNM]['System time']
+            nav['GPS week number'] = self.msgs[TP_CNM]['GPS week number']
+            nav['GPS time'] = self.msgs[TP_KFN]['GPS time']
+            nav['Position mode'] = self.msgs[TP_KFN]['Position mode']
+            nav['Latitude'] = self.msgs[TP_CNM]['Latitude']
+            nav['Longitude'] = self.msgs[TP_CNM]['Longitude']
+            nav['Ellipsoidal height'] = self.msgs[TP_CNM]['Ellipsoidal height']
+            nav['MSL height'] = self.msgs[TP_CNM]['Ellipsoidal height'] - self.msgs[TP_GH]['Geoid height']
+            nav['Position RMS-N'] = pos_rms_n
+            nav['Position RMS-E'] = pos_rms_e
+            nav['Position RMS-D'] = pos_rms_d
+            nav['Position RMS'] = math.sqrt(math.pow(pos_rms_n,2)+math.pow(pos_rms_e,2)+math.pow(pos_rms_d,2))
+            nav['Velocity mode'] = self.msgs[TP_KFN]['Velocity mode']
+            nav['Velocity_N'] = self.msgs[TP_CNM]['Velocity_N']
+            nav['Velocity_E'] = self.msgs[TP_CNM]['Velocity_E']
+            nav['Velocity_D'] = self.msgs[TP_CNM]['Velocity_D']
+            nav['Velocity RMS-N'] = vel_rms_n
+            nav['Velocity RMS-E'] = vel_rms_e
+            nav['Velocity RMS-D'] = vel_rms_d
+            nav['Velocity RMS'] = math.sqrt(math.pow(vel_rms_n,2)+math.pow(vel_rms_e,2)+math.pow(vel_rms_d,2))
+            nav['Attitude status'] = self.msgs[TP_KFN]['Attitude status']
+            nav['Roll'] = euler_angle[0]*r2d
+            nav['Pitch'] = euler_angle[1]*r2d
+            nav['Heading'] = euler_angle[2]*r2d
+            nav['Attitude RMS-N'] = att_rms_n
+            nav['Attitude RMS-E'] = att_rms_e
+            nav['Attitude RMS-D'] = att_rms_d
+            nav['Attitude RMS'] = math.sqrt(math.pow(att_rms_n,2)+math.pow(att_rms_e,2)+math.pow(att_rms_d,2))
+            
+            self.app.on_message(TP_NAV, nav, False)
+            # print((q0, q1, q2, q3))
+            # print(nav['Roll'],nav['Pitch'],nav['Heading'])
+            # print (json.dumps(nav))
+            # print("***************")
+        else:
+            pass
+
+
 
 
 if __name__ == '__main__':
