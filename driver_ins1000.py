@@ -17,11 +17,11 @@ import glob
 import math
 import json
 import collections
-import serial
-try:
-    from queue import Queue  # python3
-except ImportError:
-    from Queue import Queue  # python2
+import serial    
+if sys.version_info[0] > 2:
+    from queue import Queue
+else:
+    from Queue import Queue
 import utility
 
 
@@ -96,6 +96,7 @@ class RoverDriver:
             return when occur SerialException in thread receiver.
         '''
         HEADER_05 = [0XAF, 0X20, 0X05]
+        HEADER_06 = [0XAF, 0X20, 0X06]
         HEADER_07 = [0XAF, 0X20, 0X07]
         PAYLOAD_LEN_IDX = 4
         MSG_SUB_ID_IDX = 3
@@ -148,8 +149,11 @@ class RoverDriver:
                     if operator.eq(list(sync_pattern), HEADER_05):
                         frame = HEADER_05[:]  # header_tp.copy()
                         find_header = True
+                    elif operator.eq(list(sync_pattern), HEADER_06):
+                        frame = HEADER_06[:]
+                        find_header = True
                     elif operator.eq(list(sync_pattern), HEADER_07):
-                        frame = HEADER_07[:]  # header_tp.copy()
+                        frame = HEADER_07[:]
                         find_header = True
                     else:
                         pass
@@ -326,7 +330,7 @@ class RoverDriver:
             pass
 
     def find_header(self, data):
-        rev = True if data.find((b'\xAF\x20\x05')) > -1 or data.find((b'\xAF\x20\x07')) > -1 else False
+        rev = True if (data.find(b'\xAF\x20\x05') > -1 or data.find(b'\xAF\x20\x06') > -1 or data.find(b'\xAF\x20\x07') > -1) else False
         return rev
 
     def check_sum(self, data):
@@ -381,11 +385,112 @@ class RoverDriver:
             if data:
                 self.app.on_message(output_packet['name'], data, is_var_len_frame)
                 self.packet_handler(output_packet['name'], data, is_var_len_frame)
+        elif header.startswith('AF2006'): # some messages start with 'AF2006' are different decoding rule with message list in rover.json, so need to handle specially.
+            self.msg_typeid_06_handler(frame)
         elif input_packet:
             # data = self.unpack_input_packet(input_packet['responsePayload'], payload)
-            pass 
+            pass
+        else:
+            pass
         return data
+    
+    def msg_typeid_06_handler(self, frame):
+        PAYLOAD_SUB_ID_IDX = 3
+        PAYLOAD_LEN_IDX = 4
+        PAYLOAD_TOPIC_IDX = 6
+        payload_len = 256 * frame[PAYLOAD_LEN_IDX + 1] + frame[PAYLOAD_LEN_IDX]
+        payload = frame[6:payload_len+6]   # extract the payload
+        # header = ''.join(["%02X" % x for x in frame[0:PAYLOAD_LEN_IDX]]).strip()
+        sub_id = frame[PAYLOAD_SUB_ID_IDX]
+        topic_tp = frame[PAYLOAD_TOPIC_IDX]
+        data = []
 
+        # ref msg8.4, rover report the 'IMU rotation matrix' and 'GNSS antenna lever arm' messages.
+        if sub_id == 0X0C and topic_tp == 0X0A: 
+            msg_060D = collections.OrderedDict()
+            msg_060D['Sync 1'] = 0XAF
+            msg_060D['Sync 2'] = 0X20
+            msg_060D['Message type'] = 0X06
+            msg_060D['Message sub-ID'] = 0X0D
+            msg_060D['Payload length'] = payload_len
+            msg_060D['Topic'] = topic_tp
+
+            i = 0
+            i+=1
+            msg_060D['Aiding sensor indicators'] = payload[i]
+            i+=1
+            msg_060D['Flags'] = payload[i]
+            i+=1
+            msg_060D['Nm'] = payload[i]
+            i+=1
+            msg_060D['Minimum GNSS velocity for heading initialization'] = payload[i]
+            i+=1
+            msg_060D['Maximum unaided time'] = payload[i+1]*256+payload[i]
+            i+=2
+            msg_060D['Maximum Nav Output Rate'] = payload[i+1]*256+payload[i]
+            i+=2
+            tmp = struct.pack('72B', *payload[i:i+72]) # 9 double
+            msg_060D['IMU rotation matrix']  = list(struct.unpack('<9d', tmp))
+            i+=72
+
+            tmp = struct.pack('12B', *payload[i:i+12]) # 3 int
+            msg_060D['Output position offset']  = list(p/10000 for p in struct.unpack('<3i', tmp))
+            i+=12
+
+            # extended_version_flag is the 3rd bit in 'Aiding sensor indicators' filed.
+            extended_version_flag = (msg_060D['Aiding sensor indicators'] & 8 > 0)
+            if extended_version_flag:
+                msg_060D['Smooth transition interval']  = payload[i]
+                i+=1
+
+            # antenna_num is the 1,2 bits in 'Aiding sensor indicators' filed.
+            antenna_num = msg_060D['Aiding sensor indicators'] & 3
+            fmt = '{0}B'.format(4*antenna_num*3)
+            tmp = struct.pack(fmt, *payload[i:i+4*antenna_num*3]) 
+            fmt = '<{0}i'.format(antenna_num*3) # int32
+            msg_060D['GNSS antenna lever arm'] = list(p/10000 for p in struct.unpack(fmt, tmp))
+            i += 4*antenna_num*3
+
+            if extended_version_flag:
+                fmt = '{0}B'.format(2*antenna_num)
+                tmp = struct.pack(fmt, *payload[i:i+2*antenna_num]) 
+                fmt = '<{0}H'.format(antenna_num) # uint16 (unsigned short)
+                msg_060D['lever-arm uncertainty'] = list(p/100 for p in struct.unpack(fmt, tmp))
+                i += 2*antenna_num
+
+            if msg_060D['Nm'] > 0:
+                ICD_output = list(p for p in payload[i:i+2*msg_060D['Nm']])
+                msg_060D['ICD output'] = ICD_output
+                i += 2*msg_060D['Nm']
+
+            # Note: haven't verify below code snippet since have no virtual hex data with DMI info.
+            # DMI configuration block. 
+            if msg_060D['Aiding sensor indicators'] & 4 > 0:
+                DMI_cfg = collections.OrderedDict()
+                DMI_cfg['DMI ID'] = payload[i]
+                i+=1
+
+                tmp = struct.pack('8B', *payload[i:i+8]) # 1 double
+                DMI_cfg['DMI scale factor'] = struct.unpack('<d', tmp)[0]
+                i+=8
+
+                tmp = struct.pack('12B', *payload[i:i+12]) # int32_t[3]
+                DMI_cfg['DMI lever-arm'] = list(p/10000 for p in struct.unpack('<3i', tmp))
+                i+=12
+
+                tmp = struct.pack('2B', *payload[i:i+2]) # uint16_t
+                DMI_cfg['Lever-arm uncertainty'] = struct.unpack('<H', tmp)[0]/100
+                i+=2
+
+                if extended_version_flag:
+                    DMI_cfg['Options'] = payload[i]
+                
+                msg_060D['DMI Configuration'] = DMI_cfg
+        else:
+            pass
+        print(msg_060D)
+        print('********************')
+        
     def handel_string_filed(self, value, payload, string_len):
         '''
             handel_string_filed is used to parse one type of message which Payload is only one string field, 
@@ -581,6 +686,10 @@ class RoverDriver:
         return True
 
     def packet_handler(self, packet_type, packet, is_var_len):
+        '''
+        Driver has to construct some packets based on existing packets,
+        such as 'NAV' (navigation information) packet which based on 'KFN','CNM' and 'GH'.
+        '''
         TP_KFN = 'KFN' # msg tpyt is KFN
         TP_CNM = 'CNM'
         TP_GH = 'GH'
@@ -645,15 +754,64 @@ class RoverDriver:
             nav['Attitude RMS'] = math.sqrt(math.pow(att_rms_n,2)+math.pow(att_rms_e,2)+math.pow(att_rms_d,2))
             
             self.app.on_message(TP_NAV, nav, False)
-            # print((q0, q1, q2, q3))
-            # print(nav['Roll'],nav['Pitch'],nav['Heading'])
             # print (json.dumps(nav))
             # print("***************")
         else:
             pass
 
+    def handle_cmd_msg(self, message):
+        '''
+        Prase command message from web clint, 
+        and send corresponding hex format command message to rover.
+        '''
+        CMD_TP_QUERY = 'query'
+        CMD_TP_SET = 'set'
+        CMD_PRODUCT_ID = 'productID'
+        CMD_ENGINE_VERSION = 'engineVersion'
+        CMD_IMU_ROTATION_MATRIX = 'IMURotationMatrix'
+        CMD_GNSS_ANTENNA_LEVER_ARM = 'GNSSAntennaLeverArm'
 
+        if message['messageType'] == CMD_TP_QUERY:
+            if message['data']['packetType'] == CMD_PRODUCT_ID:
+                # AF 20 06 0B 01 00 01 01 01
+                cmd = b'\xAF\x20\x06\x0B\x01\x00\x01\x01\x01'
+                self.write(cmd)
+                pass
+            if message['data']['packetType'] == CMD_ENGINE_VERSION:
+                # AF 20 06 0B 01 00 02 02 02 
+                cmd = b'\xAF\x20\x06\x0B\x01\x00\x02\x02\x02'
+                self.write(cmd)
+                pass
+            if message['data']['packetType'] == CMD_IMU_ROTATION_MATRIX:
+                # AF 20 06 0B 01 00 0A 0A 0A 
+                cmd = b'\xAF\x20\x06\x0B\x01\x00\x0A\x0A\x0A'
+                self.write(cmd)
+                pass
+            if message['data']['packetType'] == CMD_GNSS_ANTENNA_LEVER_ARM:
+                # AF 20 06 0B 01 00 0A 0A 0A 
+                cmd = b'\xAF\x20\x06\x0B\x01\x00\x0A\x0A\x0A'
+                self.write(cmd)
+                pass
+        elif message['messageType'] == CMD_TP_SET:
+            if message['data']['packetType'] == CMD_IMU_ROTATION_MATRIX:
+                pass
+            if message['data']['packetType'] == CMD_GNSS_ANTENNA_LEVER_ARM:
+                pass
+        pass
+
+    def write(self,n):
+            try: 
+                self.ser.write(n)
+            except Exception as e:
+                print(e)
+                print('serial exception write')
+                self.exit_lock.acquire()
+                self.exit_thread = True  # Notice thread paser and receiver to exit.
+                self.exit_lock.release()
 
 
 if __name__ == '__main__':
+    # frame = bytearray(b'\xAF\x20\x06\x0C\xB2\x00\x0A\x0A\x01\x1C\x04\x3C\x00\x1B\x04\x00\x00\x00\x00\x00\x00\xF0\x3F\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xF0\x3F\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xF0\x3F\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x0B\x00\x00\x24\x00\x00\x00\x5F\xFD\xFF\xFF\x33\xF3\xFF\xFF\x24\x00\x00\x00\x5F\xFD\xFF\xFF\x01\x00\x01\x00\x01\x82\x02\x82\x03\x82\x04\x82\x05\x00\x06\x82\x07\x00\x08\x00\x09\x82\x0A\x80\x0B\x00\x0C\x00\x0D\x82\x0E\x00\x0F\x00\x10\x82\x11\x00\x12\x82\x13\x82\x14\x00\x15\x00\x16\x82\x17\x00\x18\x00\x19\x00\x1A\x00\x1B\x00\x1C\x00\xF9\x38')
+    # driver = RoverDriver()
+    # driver.msg_typeid_06_handler(frame)
     pass

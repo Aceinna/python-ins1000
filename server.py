@@ -18,11 +18,11 @@ import utility
 class WSHandler(tornado.websocket.WebSocketHandler):
     # def __init__(self, *args, **kwargs):
     #     tornado.websocket.WebSocketHandler.__init__(self, *args, **kwargs)
-    #     self.users = []
-    users = [] # reserve all web clients handlers.
+    #     self.clients = []
+    clients = [] # reserve all web clients handlers.
 
     def open(self):
-        self.users.append(self)
+        self.clients.append(self)
         data_receiver.b_have_client = True
         self.callback = tornado.ioloop.PeriodicCallback(self.send_data, callback_rate)
         self.callback.start()
@@ -49,15 +49,16 @@ class WSHandler(tornado.websocket.WebSocketHandler):
 
     def on_message(self, message):
         message = json.loads(message)
-        if message['messageType'] != 'serverStatus':
+        driver.handle_cmd_msg(message)
+        if message['messageType'] != 'serverStatus' and 'data' in message:
             file_storage.RoverLogApp(message['data'])
 
     def on_close(self):
         self.callback.stop()
 
         data_lock.acquire()
-        self.users.remove(self) # remove the closed web client from users.
-        if len(self.users) == 0: # clear all packets if no web client connect with server.
+        self.clients.remove(self) # remove the closed web client.
+        if len(self.clients) == 0: # clear all packets if no web client connect with server.
             data_receiver.b_have_client = False
             data_receiver.latest_packets.clear()
             data_receiver.all_GSVM_packets = []
@@ -67,6 +68,7 @@ class WSHandler(tornado.websocket.WebSocketHandler):
 
     def check_origin(self, origin):
         return True
+
 
 class DataReceiver(rover_application_base.RoverApplicationBase):
     def __init__(self, user=False):
@@ -131,7 +133,6 @@ class DataReceiver(rover_application_base.RoverApplicationBase):
 
     def on_exit(self):
         pass
-
 
 def driver_thread(driver):
     while True:
