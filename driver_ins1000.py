@@ -1,4 +1,4 @@
-# coding=utf-8
+# -*- coding: utf-8 -*
 """
 Driver for INS1000 Rover.
 Based on PySerial https://github.com/pyserial/pyserial
@@ -17,7 +17,8 @@ import glob
 import math
 import json
 import collections
-import serial    
+import serial
+from message import Msg_060C0A
 if sys.version_info[0] > 2:
     from queue import Queue
 else:
@@ -37,7 +38,13 @@ class RoverDriver:
         self.exit_thread = False  # flag of exit threads
         self.exit_lock = threading.Lock()  # lock of exit_thread
         self.data_lock = threading.Lock()  # lock of data_queue
+        self.app = None
         self.msgs = {} 
+        self.cmds = {}
+        self.cmds['queryProductId'] = b'\xAF\x20\x06\x0B\x01\x00\x01\x01\x01'
+        self.cmds['queryEngineVersion'] = b'\xAF\x20\x06\x0B\x01\x00\x02\x02\x02'
+        self.cmds['queryIMURotationMatrix'] = b'\xAF\x20\x06\x0B\x01\x00\x0A\x0A\x0A'
+        self.cmds['queryGNSSAntennaLeverArm'] = self.cmds['queryIMURotationMatrix']
         self.setting_folder = os.path.join(os.getcwd(), r'setting')  # use to store some configuration files.
         self.connection_file = os.path.join(self.setting_folder, 'connection.json')
         self.rover_properties = utility.load_configuration(os.path.join(self.setting_folder, 'rover.json'))
@@ -55,7 +62,8 @@ class RoverDriver:
             self.data_queue.get()
         self.exit_thread = False
         self.threads = []  # clear threads
-        self.app.on_reinit()
+        if self.app:
+            self.app.on_reinit()
         self.msgs.clear()
 
     def set_app(self, app):
@@ -212,6 +220,9 @@ class RoverDriver:
             print("Thread[{0}({1})] started.".format(t.name, t.ident))
             self.threads.append(t)
 
+        # query user configurations setup
+        self.write(self.cmds['queryIMURotationMatrix'])
+
         if self.handle_KeyboardInterrupt():
             return False
 
@@ -232,7 +243,8 @@ class RoverDriver:
                 while not self.autobaud(self.find_ports()):
                     time.sleep(0.1)
 
-            self.app.on_find_active_rover()
+            if self.app:
+                self.app.on_find_active_rover()
             return True
         except KeyboardInterrupt:  # response for KeyboardInterrupt such as Ctrl+C
             print('User stop this program by KeyboardInterrupt! File:[{0}], Line:[{1}]'.format(__file__, sys._getframe().f_lineno))
@@ -383,8 +395,9 @@ class RoverDriver:
                 data = self.unpack_output_packet(output_packet, payload, payload_len)
                 self.change_scale(output_packet, data)
             if data:
-                self.app.on_message(output_packet['name'], data, is_var_len_frame)
-                self.packet_handler(output_packet['name'], data, is_var_len_frame)
+                if self.app:
+                    self.app.on_message(output_packet['name'], data, is_var_len_frame)
+                    self.packet_handler(output_packet['name'], data, is_var_len_frame)
         elif header.startswith('AF2006'): # some messages start with 'AF2006' are different decoding rule with message list in rover.json, so need to handle specially.
             self.msg_typeid_06_handler(frame)
         elif input_packet:
@@ -395,6 +408,9 @@ class RoverDriver:
         return data
     
     def msg_typeid_06_handler(self, frame):
+        '''
+
+        '''
         PAYLOAD_SUB_ID_IDX = 3
         PAYLOAD_LEN_IDX = 4
         PAYLOAD_TOPIC_IDX = 6
@@ -407,89 +423,23 @@ class RoverDriver:
 
         # ref msg8.4, rover report the 'IMU rotation matrix' and 'GNSS antenna lever arm' messages.
         if sub_id == 0X0C and topic_tp == 0X0A: 
-            msg_060D = collections.OrderedDict()
-            msg_060D['Sync 1'] = 0XAF
-            msg_060D['Sync 2'] = 0X20
-            msg_060D['Message type'] = 0X06
-            msg_060D['Message sub-ID'] = 0X0D
-            msg_060D['Payload length'] = payload_len
-            msg_060D['Topic'] = topic_tp
-
-            i = 0
-            i+=1
-            msg_060D['Aiding sensor indicators'] = payload[i]
-            i+=1
-            msg_060D['Flags'] = payload[i]
-            i+=1
-            msg_060D['Nm'] = payload[i]
-            i+=1
-            msg_060D['Minimum GNSS velocity for heading initialization'] = payload[i]
-            i+=1
-            msg_060D['Maximum unaided time'] = payload[i+1]*256+payload[i]
-            i+=2
-            msg_060D['Maximum Nav Output Rate'] = payload[i+1]*256+payload[i]
-            i+=2
-            tmp = struct.pack('72B', *payload[i:i+72]) # 9 double
-            msg_060D['IMU rotation matrix']  = list(struct.unpack('<9d', tmp))
-            i+=72
-
-            tmp = struct.pack('12B', *payload[i:i+12]) # 3 int
-            msg_060D['Output position offset']  = list(p/10000 for p in struct.unpack('<3i', tmp))
-            i+=12
-
-            # extended_version_flag is the 3rd bit in 'Aiding sensor indicators' filed.
-            extended_version_flag = (msg_060D['Aiding sensor indicators'] & 8 > 0)
-            if extended_version_flag:
-                msg_060D['Smooth transition interval']  = payload[i]
-                i+=1
-
-            # antenna_num is the 1,2 bits in 'Aiding sensor indicators' filed.
-            antenna_num = msg_060D['Aiding sensor indicators'] & 3
-            fmt = '{0}B'.format(4*antenna_num*3)
-            tmp = struct.pack(fmt, *payload[i:i+4*antenna_num*3]) 
-            fmt = '<{0}i'.format(antenna_num*3) # int32
-            msg_060D['GNSS antenna lever arm'] = list(p/10000 for p in struct.unpack(fmt, tmp))
-            i += 4*antenna_num*3
-
-            if extended_version_flag:
-                fmt = '{0}B'.format(2*antenna_num)
-                tmp = struct.pack(fmt, *payload[i:i+2*antenna_num]) 
-                fmt = '<{0}H'.format(antenna_num) # uint16 (unsigned short)
-                msg_060D['lever-arm uncertainty'] = list(p/100 for p in struct.unpack(fmt, tmp))
-                i += 2*antenna_num
-
-            if msg_060D['Nm'] > 0:
-                ICD_output = list(p for p in payload[i:i+2*msg_060D['Nm']])
-                msg_060D['ICD output'] = ICD_output
-                i += 2*msg_060D['Nm']
-
-            # Note: haven't verify below code snippet since have no virtual hex data with DMI info.
-            # DMI configuration block. 
-            if msg_060D['Aiding sensor indicators'] & 4 > 0:
-                DMI_cfg = collections.OrderedDict()
-                DMI_cfg['DMI ID'] = payload[i]
-                i+=1
-
-                tmp = struct.pack('8B', *payload[i:i+8]) # 1 double
-                DMI_cfg['DMI scale factor'] = struct.unpack('<d', tmp)[0]
-                i+=8
-
-                tmp = struct.pack('12B', *payload[i:i+12]) # int32_t[3]
-                DMI_cfg['DMI lever-arm'] = list(p/10000 for p in struct.unpack('<3i', tmp))
-                i+=12
-
-                tmp = struct.pack('2B', *payload[i:i+2]) # uint16_t
-                DMI_cfg['Lever-arm uncertainty'] = struct.unpack('<H', tmp)[0]/100
-                i+=2
-
-                if extended_version_flag:
-                    DMI_cfg['Options'] = payload[i]
-                
-                msg_060D['DMI Configuration'] = DMI_cfg
+            msg_060C0A = Msg_060C0A(frame)
+            self.msgs['Msg_060C0A'] = msg_060C0A
+            data = collections.OrderedDict()
+            for i, c in enumerate(msg_060C0A.imu_rotation_matrix):
+                data['C{0}'.format(i)] = c
+            if self.app:
+                self.app.on_message( "IMURotationMatrix", data, False)
         else:
             pass
-        print(msg_060D)
-        print('********************')
+
+
+
+
+
+        # from pprint import pprint
+        # pprint (vars(msg_060C0A))
+        # print('********************')
         
     def handel_string_filed(self, value, payload, string_len):
         '''
@@ -753,7 +703,8 @@ class RoverDriver:
             nav['Attitude RMS-D'] = att_rms_d
             nav['Attitude RMS'] = math.sqrt(math.pow(att_rms_n,2)+math.pow(att_rms_e,2)+math.pow(att_rms_d,2))
             
-            self.app.on_message(TP_NAV, nav, False)
+            if self.app:
+                self.app.on_message(TP_NAV, nav, False)
             # print (json.dumps(nav))
             # print("***************")
         else:
@@ -774,23 +725,19 @@ class RoverDriver:
         if message['messageType'] == CMD_TP_QUERY:
             if message['data']['packetType'] == CMD_PRODUCT_ID:
                 # AF 20 06 0B 01 00 01 01 01
-                cmd = b'\xAF\x20\x06\x0B\x01\x00\x01\x01\x01'
-                self.write(cmd)
+                self.write(self.cmds['queryProductId'])
                 pass
             if message['data']['packetType'] == CMD_ENGINE_VERSION:
                 # AF 20 06 0B 01 00 02 02 02 
-                cmd = b'\xAF\x20\x06\x0B\x01\x00\x02\x02\x02'
-                self.write(cmd)
+                self.write(self.cmds['queryEngineVersion'])
                 pass
             if message['data']['packetType'] == CMD_IMU_ROTATION_MATRIX:
                 # AF 20 06 0B 01 00 0A 0A 0A 
-                cmd = b'\xAF\x20\x06\x0B\x01\x00\x0A\x0A\x0A'
-                self.write(cmd)
+                self.write(self.cmds['queryIMURotationMatrix'])
                 pass
             if message['data']['packetType'] == CMD_GNSS_ANTENNA_LEVER_ARM:
                 # AF 20 06 0B 01 00 0A 0A 0A 
-                cmd = b'\xAF\x20\x06\x0B\x01\x00\x0A\x0A\x0A'
-                self.write(cmd)
+                self.write(self.cmds['queryGNSSAntennaLeverArm'])
                 pass
         elif message['messageType'] == CMD_TP_SET:
             if message['data']['packetType'] == CMD_IMU_ROTATION_MATRIX:
@@ -811,7 +758,7 @@ class RoverDriver:
 
 
 if __name__ == '__main__':
-    # frame = bytearray(b'\xAF\x20\x06\x0C\xB2\x00\x0A\x0A\x01\x1C\x04\x3C\x00\x1B\x04\x00\x00\x00\x00\x00\x00\xF0\x3F\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xF0\x3F\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xF0\x3F\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x0B\x00\x00\x24\x00\x00\x00\x5F\xFD\xFF\xFF\x33\xF3\xFF\xFF\x24\x00\x00\x00\x5F\xFD\xFF\xFF\x01\x00\x01\x00\x01\x82\x02\x82\x03\x82\x04\x82\x05\x00\x06\x82\x07\x00\x08\x00\x09\x82\x0A\x80\x0B\x00\x0C\x00\x0D\x82\x0E\x00\x0F\x00\x10\x82\x11\x00\x12\x82\x13\x82\x14\x00\x15\x00\x16\x82\x17\x00\x18\x00\x19\x00\x1A\x00\x1B\x00\x1C\x00\xF9\x38')
-    # driver = RoverDriver()
-    # driver.msg_typeid_06_handler(frame)
+    frame = bytearray(b'\xAF\x20\x06\x0C\xB2\x00\x0A\x0A\x01\x1C\x04\x3C\x00\x1B\x04\x00\x00\x00\x00\x00\x00\xF0\x3F\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xF0\x3F\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xF0\x3F\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x0B\x00\x00\x24\x00\x00\x00\x5F\xFD\xFF\xFF\x33\xF3\xFF\xFF\x24\x00\x00\x00\x5F\xFD\xFF\xFF\x01\x00\x01\x00\x01\x82\x02\x82\x03\x82\x04\x82\x05\x00\x06\x82\x07\x00\x08\x00\x09\x82\x0A\x80\x0B\x00\x0C\x00\x0D\x82\x0E\x00\x0F\x00\x10\x82\x11\x00\x12\x82\x13\x82\x14\x00\x15\x00\x16\x82\x17\x00\x18\x00\x19\x00\x1A\x00\x1B\x00\x1C\x00\xF9\x38')
+    driver = RoverDriver()
+    driver.msg_typeid_06_handler(frame)
     pass

@@ -411,7 +411,7 @@
         "header": "AF200516",
         "description": "Geoid Height",
         "save2file": 0,
-        "send2web": 1,
+        "send2web": 0,
         "payload": [
           {
             "type": "double",
@@ -636,6 +636,20 @@
             "unit": "deg"
           }
         ]
+      },
+      {
+        "name": "IMURotationMatrix",
+        "header": "NONE",
+        "description": "IMU to user-frame rotation matrix. This message is not from rover directly but packed by driver. ",
+        "save2file": 0,
+        "send2web": 1
+      },
+      {
+        "name": "GNSSAntennaLeverArm",
+        "header": "NONE",
+        "description": "GNSS antenna lever arm in the user body frame. This message is not from rover directly but packed by driver. ",
+        "save2file": 0,
+        "send2web": 1
       }
     ]
   }

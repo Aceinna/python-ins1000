@@ -33,18 +33,23 @@ class WSHandler(tornado.websocket.WebSocketHandler):
             for key in data_receiver.latest_packets:
                 json_msg = json.dumps({ 'messageType' : 'event',  'data' : {'packetType' : key, 'packet' : data_receiver.latest_packets[key] }})
                 self.write_message(json_msg)
-                # if key == 'GH':
-                #     print(json_msg)
-                #     print('************')
+                # print(json_msg)
+                # print('************')
             data_receiver.latest_packets.clear()
 
-            for key in data_receiver.all_GSVM_packets:
-                json_msg = json.dumps({ 'messageType' : 'event',  'data' : {'packetType' : 'GSVM', 'packet' : key }})
+            for p in data_receiver.all_GSVM_packets:
+                json_msg = json.dumps({ 'messageType' : 'event',  'data' : {'packetType' : 'GSVM', 'packet' : p }})
                 self.write_message(json_msg)
                 # print(json_msg)
                 # print('************')
             data_receiver.all_GSVM_packets = []
-            # print(json.dumps({ 'messageType' : 'event',  'data' : { 'data' : data_receiver.data }}))
+
+            for p in data_receiver.all_SSS_packets:
+                json_msg = json.dumps({ 'messageType' : 'event',  'data' : {'packetType' : 'SSS', 'packet' : p }})
+                self.write_message(json_msg)
+                # print(json_msg)
+                # print('************')
+            data_receiver.all_SSS_packets = []
         data_lock.release()
 
     def on_message(self, message):
@@ -76,6 +81,7 @@ class DataReceiver(rover_application_base.RoverApplicationBase):
         '''
         self.latest_packets = {}
         self.all_GSVM_packets = []
+        self.all_SSS_packets = []
         self.msgs_send2web = []
         self.b_have_client = False
 
@@ -101,24 +107,11 @@ class DataReceiver(rover_application_base.RoverApplicationBase):
         data = args[1]
         is_var_len_frame = args[2]
         # print('[{0}]:{1}'.format(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S'), packet_type))
-        '''
-            1. Message which need to send to Web client every x seconds by timer.
-                1.1 SA: Sensor Activity.
-                1.2 NCA: NTRIP Client Activity.
-            2. Message which need to send all to Web client.
-                2.1 SSS: Satellite Signal Strength
-                2.2 GSVM: Repackaged GSV Message
-            3. Message which need to be re-packet then send to Web client.
-                3.1 Construct new 'NAV' packet based on KFN/CNM/GH then send to web client.
-            4. Message which need to send to Web client at once when driver receives.
-                4.1 PID: Product ID Message.
-                4.2 EV: Engine Version Message.
-            5. Message which needn't to send to Web client.
-                5.1 TSM: PPS info.
-        '''
         if self.b_have_client and packet_type in self.msgs_send2web:
             if packet_type == 'GSVM':
                 self.all_GSVM_packets.append(data)
+            elif packet_type == 'SSS':
+                self.all_SSS_packets.append(data)
             else:
                 self.latest_packets[packet_type] = data
 
@@ -149,7 +142,7 @@ def driver_thread(driver):
 
 if __name__ == '__main__':
     '''main'''
-    callback_rate = 150
+    callback_rate = 1000
     data_lock = threading.Lock()
 
     try:

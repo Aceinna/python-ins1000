@@ -1,0 +1,7 @@
+# !.gitignore
+__pycache__
+data
+.DS_Store
+*.pyc
+setting/connection.json
+tempLogFiles.json
