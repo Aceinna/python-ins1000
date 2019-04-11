@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*
+"""
+Created on 2019-04-09
+@author: Ocean
+"""
 
 import json
 import math
@@ -16,6 +20,18 @@ def load_configuration(json_file):
     except Exception as e:
         print(e)
         return None
+
+def check_sum(data):
+    ''' Calculate the checksum code
+    '''
+    checksum_a = checksum_b = 0
+    for i in data:
+        checksum_a += i
+        checksum_b += checksum_a
+
+    checksum_a %= 256
+    checksum_b %= 256
+    return checksum_a, checksum_b
 
 def cal_attitude(q0, q1, q2, q3):
     q0_2 = q0 * q0

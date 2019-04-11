@@ -228,7 +228,7 @@
         "name": "CNM",
         "header": "AF20050D",
         "description": "Compact Navigation Message (High Rate)",
-        "save2file": 1,
+        "save2file": 0,
         "send2web": 0,
         "payload": [
           {
@@ -430,7 +430,7 @@
         "header": "AF200701",
         "description": "Sensor Activity.This message indicates the activity of each sub-system thus it can be used to monitor the system.",
         "save2file": 0,
-        "send2web": 1,
+        "send2web": 0,
         "payload": [
           {
             "type": "uint16",
@@ -479,7 +479,7 @@
         "header": "AF200702",
         "description": "NTRIP Client Activity.This message indicates the activity of the NTRIP client receiving data.",
         "save2file": 0,
-        "send2web": 1,
+        "send2web": 0,
         "payload": [
           {
             "type": "uint16",
@@ -511,7 +511,7 @@
             "unit": "s"
           },
           {
-            "type": "uint8",
+            "type": "string",
             "name": "Position mode",
             "unit": ""
           },
@@ -556,7 +556,7 @@
             "unit": "m"
           },
           {
-            "type": "uint8",
+            "type": "string",
             "name": "Velocity mode",
             "unit": ""
           },
@@ -596,7 +596,7 @@
             "unit": "m/s"
           },
           {
-            "type": "uint8",
+            "type": "string",
             "name": "Attitude status",
             "unit": ""
           },
@@ -636,6 +636,13 @@
             "unit": "deg"
           }
         ]
+      },
+      {
+        "name": "SS",
+        "header": "NONE",
+        "description": "Subsystems Status. This message is not from rover directly but packed by driver. ",
+        "save2file": 0,
+        "send2web": 1
       },
       {
         "name": "IMURotationMatrix",

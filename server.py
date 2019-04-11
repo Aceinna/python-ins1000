@@ -53,11 +53,14 @@ class WSHandler(tornado.websocket.WebSocketHandler):
         data_lock.release()
 
     def on_message(self, message):
-        message = json.loads(message)
-        driver.handle_cmd_msg(message)
-        if message['messageType'] != 'serverStatus' and 'data' in message:
-            file_storage.RoverLogApp(message['data'])
-
+        try:
+            message = json.loads(message)
+            driver.handle_cmd_msg(message)
+            if message['messageType'] != 'serverStatus' and 'data' in message:
+                file_storage.RoverLogApp(message['data'])
+        except Exception as e:
+                print(e)
+                
     def on_close(self):
         self.callback.stop()
 

@@ -45,6 +45,8 @@ class RoverDriver:
         self.cmds['queryEngineVersion'] = b'\xAF\x20\x06\x0B\x01\x00\x02\x02\x02'
         self.cmds['queryIMURotationMatrix'] = b'\xAF\x20\x06\x0B\x01\x00\x0A\x0A\x0A'
         self.cmds['queryGNSSAntennaLeverArm'] = self.cmds['queryIMURotationMatrix']
+        self.nav_pos_vel_mode = {0:'INVALID', 1:'DEAD_RECKON', 2:'STAND_ALONE', 3:'PRECISE_POINT_POSITIONING', 4:'CODE_DIFF', 5:'RTK_FLOAT', 6:'RTK_FIXED', 7:'USER_AIDING'}
+        self.nav_att_mode = {0:'INVALID', 1:'COARSE', 2:'FINE'}
         self.setting_folder = os.path.join(os.getcwd(), r'setting')  # use to store some configuration files.
         self.connection_file = os.path.join(self.setting_folder, 'connection.json')
         self.rover_properties = utility.load_configuration(os.path.join(self.setting_folder, 'rover.json'))
@@ -139,7 +141,7 @@ class RoverDriver:
                     elif 6 + payload_len + 2 == len(frame):  # 6: len of header; 2:len of checksum.
                         find_header = False
                         # checksum
-                        result = self.check_sum(frame[PAYLOAD_LEN_IDX + 2:PAYLOAD_LEN_IDX + payload_len + 2])
+                        result = utility.check_sum(frame[PAYLOAD_LEN_IDX + 2:PAYLOAD_LEN_IDX + payload_len + 2])
                         if result[0] == frame[-2] and result[1] == frame[-1]:
                             # find a whole frame
                             self.parse_frame(frame)
@@ -345,17 +347,7 @@ class RoverDriver:
         rev = True if (data.find(b'\xAF\x20\x05') > -1 or data.find(b'\xAF\x20\x06') > -1 or data.find(b'\xAF\x20\x07') > -1) else False
         return rev
 
-    def check_sum(self, data):
-        ''' Calculate the checksum
-        '''
-        checksum_a = checksum_b = 0
-        for i in data:
-            checksum_a += i
-            checksum_b += checksum_a
 
-        checksum_a %= 256
-        checksum_b %= 256
-        return checksum_a, checksum_b
 
     def get_packet_type(self):
         return self.packet_type
@@ -397,7 +389,7 @@ class RoverDriver:
             if data:
                 if self.app:
                     self.app.on_message(output_packet['name'], data, is_var_len_frame)
-                    self.packet_handler(output_packet['name'], data, is_var_len_frame)
+                self.packet_handler(output_packet['name'], data, is_var_len_frame)
         elif header.startswith('AF2006'): # some messages start with 'AF2006' are different decoding rule with message list in rover.json, so need to handle specially.
             self.msg_typeid_06_handler(frame)
         elif input_packet:
@@ -424,27 +416,31 @@ class RoverDriver:
         # ref msg8.4, rover report the 'IMU rotation matrix' and 'GNSS antenna lever arm' messages.
         if sub_id == 0X0C and topic_tp == 0X0A: 
             msg_060C0A = Msg_060C0A(frame)
+            # msg_060C0A.pack_msg_060D()
             self.msgs['Msg_060C0A'] = msg_060C0A
-            data = collections.OrderedDict()
-            for i, c in enumerate(msg_060C0A.imu_rotation_matrix):
-                data['C{0}'.format(i)] = c
+            imu_rotation_matrix = msg_060C0A.get_imu_rotation_matrix()
+            # json_msg = json.dumps({ 'messageType' : 'event',  'data' : {'packetType' : 'IMURotationMatrix', 'packet' : imu_rotation_matrix }})
+            '''
+            todo:
+            1. update new msg_060C0A in self.msgs
+            2. get_imu_rotation_matrix and send to web
+            3. get_GNSS_lever_arm_center and send to web
+            '''
             if self.app:
-                self.app.on_message( "IMURotationMatrix", data, False)
+                self.app.on_message( "IMURotationMatrix", imu_rotation_matrix, False)
+                # wrt_imu_center,lever_arm = msg_060C0A.get_GNSS_lever_arm_center()
+
         else:
             pass
-
-
-
-
 
         # from pprint import pprint
         # pprint (vars(msg_060C0A))
         # print('********************')
         
-    def handel_string_filed(self, value, payload, string_len):
+    def handle_string_filed(self, value, payload, string_len):
         '''
-            handel_string_filed is used to parse one type of message which Payload is only one string field, 
-            such as message 5.18(handel_string_filed) and 6.1(handel_string_filed).
+            handle_string_filed is used to parse one type of message which Payload is only one string field, 
+            such as message 5.18(Engine Version Message) and 6.1(Text Message).
         '''
         pack_fmt = string_len*'c'
         len_fmt = '{0}B'.format(string_len)
@@ -459,7 +455,7 @@ class RoverDriver:
         pack_fmt = '<'
         for value in output_message['payload']:
             if value['type'] == 'string':
-                return self.handel_string_filed(value, payload, payload_len)
+                return self.handle_string_filed(value, payload, payload_len)
             elif value['type'] == 'float':
                 pack_fmt += 'f'
                 length += 4
@@ -644,6 +640,9 @@ class RoverDriver:
         TP_CNM = 'CNM'
         TP_GH = 'GH'
         TP_NAV = 'NAV'
+        TP_SA = 'SA'
+        TP_NCA = 'NCA'
+        TP_SS = 'SS'
 
         # self.msgs is used to restore the newest packets.
         if TP_KFN == packet_type:
@@ -652,11 +651,15 @@ class RoverDriver:
             self.msgs[TP_CNM] = packet
         elif TP_GH == packet_type:
             self.msgs[TP_GH] = packet
+        elif TP_SA == packet_type:
+            self.msgs[TP_SA] = packet
+        elif TP_NCA == packet_type:
+            self.msgs[TP_NCA] = packet
         else:
             pass
 
         # make sure have received 'KFN', 'CNM' and 'GH' already before construct 'NAV'
-        if TP_KFN in self.msgs and TP_CNM in self.msgs and TP_GH in self.msgs:
+        if TP_KFN in self.msgs and TP_CNM in self.msgs and TP_GH in self.msgs and TP_CNM == packet_type:
             r2d = 180/math.pi
             pos_rms_n = self.msgs[TP_CNM]['Position RMS-N']
             pos_rms_e = self.msgs[TP_CNM]['Position RMS-E']
@@ -677,7 +680,7 @@ class RoverDriver:
             nav['System time'] = self.msgs[TP_CNM]['System time']
             nav['GPS week number'] = self.msgs[TP_CNM]['GPS week number']
             nav['GPS time'] = self.msgs[TP_KFN]['GPS time']
-            nav['Position mode'] = self.msgs[TP_KFN]['Position mode']
+            nav['Position mode'] = self.nav_pos_vel_mode[self.msgs[TP_KFN]['Position mode']]
             nav['Latitude'] = self.msgs[TP_CNM]['Latitude']
             nav['Longitude'] = self.msgs[TP_CNM]['Longitude']
             nav['Ellipsoidal height'] = self.msgs[TP_CNM]['Ellipsoidal height']
@@ -686,7 +689,7 @@ class RoverDriver:
             nav['Position RMS-E'] = pos_rms_e
             nav['Position RMS-D'] = pos_rms_d
             nav['Position RMS'] = math.sqrt(math.pow(pos_rms_n,2)+math.pow(pos_rms_e,2)+math.pow(pos_rms_d,2))
-            nav['Velocity mode'] = self.msgs[TP_KFN]['Velocity mode']
+            nav['Velocity mode'] = self.nav_pos_vel_mode[self.msgs[TP_KFN]['Velocity mode']]
             nav['Velocity_N'] = self.msgs[TP_CNM]['Velocity_N']
             nav['Velocity_E'] = self.msgs[TP_CNM]['Velocity_E']
             nav['Velocity_D'] = self.msgs[TP_CNM]['Velocity_D']
@@ -694,7 +697,7 @@ class RoverDriver:
             nav['Velocity RMS-E'] = vel_rms_e
             nav['Velocity RMS-D'] = vel_rms_d
             nav['Velocity RMS'] = math.sqrt(math.pow(vel_rms_n,2)+math.pow(vel_rms_e,2)+math.pow(vel_rms_d,2))
-            nav['Attitude status'] = self.msgs[TP_KFN]['Attitude status']
+            nav['Attitude status'] = self.nav_att_mode[self.msgs[TP_KFN]['Attitude status']]
             nav['Roll'] = euler_angle[0]*r2d
             nav['Pitch'] = euler_angle[1]*r2d
             nav['Heading'] = euler_angle[2]*r2d
@@ -702,11 +705,32 @@ class RoverDriver:
             nav['Attitude RMS-E'] = att_rms_e
             nav['Attitude RMS-D'] = att_rms_d
             nav['Attitude RMS'] = math.sqrt(math.pow(att_rms_n,2)+math.pow(att_rms_e,2)+math.pow(att_rms_d,2))
-            
+
             if self.app:
                 self.app.on_message(TP_NAV, nav, False)
             # print (json.dumps(nav))
             # print("***************")
+        # elif (TP_SA == packet_type and TP_NCA in self.msgs) \
+        # or (TP_NCA == packet_type and TP_SA in self.msgs):
+        
+        elif TP_SA == packet_type:
+            data = collections.OrderedDict()
+            data['IMU Status'] = 1 if packet['IMU message count'] > 0 else 0
+            data['GNSS Status'] = 1 if packet['GNSS message count'] > 0 else 0
+            data['PPS Status'] = 1 if packet['PPS count'] > 0 else 0
+            data['NTRIP Status'] = 0
+            self.msgs[TP_SS] = data
+            if self.app:
+                self.app.on_message(TP_SS, data, False)
+        elif TP_NCA == packet_type:
+            data = collections.OrderedDict()
+            data['IMU Status'] = 0
+            data['GNSS Status'] = 0
+            data['PPS Status'] = 0
+            data['NTRIP Status'] = 1 if packet['NTRIP message size'] > 0 else 0
+            self.msgs[TP_SS] = data
+            if self.app:
+                self.app.on_message(TP_SS, data, False)
         else:
             pass
 
@@ -717,37 +741,52 @@ class RoverDriver:
         '''
         CMD_TP_QUERY = 'query'
         CMD_TP_SET = 'set'
-        CMD_PRODUCT_ID = 'productID'
-        CMD_ENGINE_VERSION = 'engineVersion'
+        CMD_PRODUCT_ID = 'ProductID'
+        CMD_ENGINE_VERSION = 'EngineVersion'
         CMD_IMU_ROTATION_MATRIX = 'IMURotationMatrix'
         CMD_GNSS_ANTENNA_LEVER_ARM = 'GNSSAntennaLeverArm'
 
         if message['messageType'] == CMD_TP_QUERY:
             if message['data']['packetType'] == CMD_PRODUCT_ID:
-                # AF 20 06 0B 01 00 01 01 01
                 self.write(self.cmds['queryProductId'])
-                pass
             if message['data']['packetType'] == CMD_ENGINE_VERSION:
-                # AF 20 06 0B 01 00 02 02 02 
                 self.write(self.cmds['queryEngineVersion'])
-                pass
             if message['data']['packetType'] == CMD_IMU_ROTATION_MATRIX:
-                # AF 20 06 0B 01 00 0A 0A 0A 
                 self.write(self.cmds['queryIMURotationMatrix'])
-                pass
             if message['data']['packetType'] == CMD_GNSS_ANTENNA_LEVER_ARM:
-                # AF 20 06 0B 01 00 0A 0A 0A 
                 self.write(self.cmds['queryGNSSAntennaLeverArm'])
-                pass
         elif message['messageType'] == CMD_TP_SET:
             if message['data']['packetType'] == CMD_IMU_ROTATION_MATRIX:
-                pass
-            if message['data']['packetType'] == CMD_GNSS_ANTENNA_LEVER_ARM:
-                pass
+                matrix = list(message['data']['packet']['C{0}'.format(i)] for i in range(9))
+                if 'Msg_060C0A' in self.msgs:
+                    msg_060C0A = self.msgs['Msg_060C0A']
+                    msg_060C0A.set_imu_rotation_matrix(matrix)
+                    msg_060C0A.pack_msg_060D()
+                    self.write(msg_060C0A.msg_060D_cmd)
+                else:
+                    self.write(self.cmds['queryIMURotationMatrix'])
+
+            elif message['data']['packetType'] == CMD_GNSS_ANTENNA_LEVER_ARM:
+                packet = message['data']['packet']
+                antenna_num = packet[0]['Antenna_num']
+                lever_arm_wrt_imu_center = True if (packet[0]['LeverArm_WRT'] == 'IMU Center') else False
+                lever_arms = {}
+                for i in range(1,antenna_num+1):
+                    lever_arms[packet[i]['Antenna_ID']] = [packet[i]['LeverArm_X'],packet[i]['LeverArm_Y'],packet[i]['LeverArm_Z']]
+                # ensure lever-arm is sorted by Antenna_ID.
+                lever_arm = [lever_arms[k] for k in sorted(lever_arms.keys())] 
+                if 'Msg_060C0A' in self.msgs['Msg_060C0A']:      
+                    msg_060C0A = self.msgs['Msg_060C0A']
+                    msg_060C0A.set_GNSS_lever_arm_center(lever_arm, lever_arm_wrt_imu_center)
+                    msg_060C0A.pack_msg_060D()
+                    self.write(msg_060C0A.msg_060D_cmd)
+                else:
+                    self.write(self.cmds['queryGNSSAntennaLeverArm'])
+
         pass
 
     def write(self,n):
-            try: 
+            try:
                 self.ser.write(n)
             except Exception as e:
                 print(e)
@@ -761,4 +800,14 @@ if __name__ == '__main__':
     frame = bytearray(b'\xAF\x20\x06\x0C\xB2\x00\x0A\x0A\x01\x1C\x04\x3C\x00\x1B\x04\x00\x00\x00\x00\x00\x00\xF0\x3F\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xF0\x3F\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xF0\x3F\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x0B\x00\x00\x24\x00\x00\x00\x5F\xFD\xFF\xFF\x33\xF3\xFF\xFF\x24\x00\x00\x00\x5F\xFD\xFF\xFF\x01\x00\x01\x00\x01\x82\x02\x82\x03\x82\x04\x82\x05\x00\x06\x82\x07\x00\x08\x00\x09\x82\x0A\x80\x0B\x00\x0C\x00\x0D\x82\x0E\x00\x0F\x00\x10\x82\x11\x00\x12\x82\x13\x82\x14\x00\x15\x00\x16\x82\x17\x00\x18\x00\x19\x00\x1A\x00\x1B\x00\x1C\x00\xF9\x38')
     driver = RoverDriver()
     driver.msg_typeid_06_handler(frame)
+
+    # message = '''{"messageType":"set","data":{"packetType":"IMURotationMatrix","packet":{"C0":1,"C1":0,"C2":0,"C3":0,"C4":1,"C5":0,"C6":0,"C7":0,"C8":1}}}'''
+    # message = '''{"messageType":"set","data":{"packetType":"GNSSAntennaLeverArm","packet":[{"Antenna_num":2,"LeverArm_WRT":"IMU Center"},{"Antenna_ID":2,"LeverArm_X":0.4,"LeverArm_Y":0.5,"LeverArm_Z":-0.6},{"Antenna_ID":1,"LeverArm_X":0.1,"LeverArm_Y":0.2,"LeverArm_Z":-0.3}]}}'''
+    # message = json.loads(message)
+    # driver.handle_cmd_msg(message)
+
+    # todo:
+    # 1. set/get_GNSS_lever_arm_center 
+    # 2. msg_typeid_06_handler 
     pass
+
