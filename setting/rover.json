@@ -657,6 +657,13 @@
         "description": "GNSS antenna lever arm in the user body frame. This message is not from rover directly but packed by driver. ",
         "save2file": 0,
         "send2web": 1
+      },
+      {
+        "name": "FV",
+        "header": "AF20060C",
+        "description": "Firmware Version Message.",
+        "save2file": 0,
+        "send2web": 1
       }
     ]
   }

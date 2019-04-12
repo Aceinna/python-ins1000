@@ -8,7 +8,7 @@ import copy
 import utility
 import collections
 
-class Msg_060C0A(object):
+class Msg_060C_topic_0A(object):
     def __init__(self, frame):
         ''' initialization
         '''
@@ -40,10 +40,10 @@ class Msg_060C0A(object):
         # used to packet the '8.4 User Configuration Setup' message.
         self.msg_060D_cmd = ''
         
-        self.unpack_msg_060C0A()
+        self.unpack_msg_060C_topic_0A()
         pass
 
-    def unpack_msg_060C0A(self):
+    def unpack_msg_060C_topic_0A(self):
         '''
         parse AF20060C0A message which topic is 0A.
         '''

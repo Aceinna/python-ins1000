@@ -18,7 +18,7 @@ import math
 import json
 import collections
 import serial
-from message import Msg_060C0A
+from message import Msg_060C_topic_0A
 if sys.version_info[0] > 2:
     from queue import Queue
 else:
@@ -38,11 +38,15 @@ class RoverDriver:
         self.exit_thread = False  # flag of exit threads
         self.exit_lock = threading.Lock()  # lock of exit_thread
         self.data_lock = threading.Lock()  # lock of data_queue
+        self.web_clients_lock = threading.Lock()  # lock of data_queue
         self.app = None
+        self.web_clients = []
         self.msgs = {} 
         self.cmds = {}
         self.cmds['queryProductId'] = b'\xAF\x20\x06\x0B\x01\x00\x01\x01\x01'
         self.cmds['queryEngineVersion'] = b'\xAF\x20\x06\x0B\x01\x00\x02\x02\x02'
+        self.cmds['queryFirmwareVersion'] = b'\xAF\x20\x06\x0B\x01\x00\x0C\x0C\x0C'
+        self.cmds['queryInternalLeverArm'] = b'\xAF\x20\x06\x0B\x01\x00\x04\x04\x04'
         self.cmds['queryIMURotationMatrix'] = b'\xAF\x20\x06\x0B\x01\x00\x0A\x0A\x0A'
         self.cmds['queryGNSSAntennaLeverArm'] = self.cmds['queryIMURotationMatrix']
         self.nav_pos_vel_mode = {0:'INVALID', 1:'DEAD_RECKON', 2:'STAND_ALONE', 3:'PRECISE_POINT_POSITIONING', 4:'CODE_DIFF', 5:'RTK_FLOAT', 6:'RTK_FIXED', 7:'USER_AIDING'}
@@ -70,6 +74,16 @@ class RoverDriver:
 
     def set_app(self, app):
         self.app = app
+
+    def add_client(self, client):
+        self.web_clients_lock.acquire()
+        self.web_clients.append(client)
+        self.web_clients_lock.release()
+
+    def remove_client(self, client):
+        self.web_clients_lock.acquire()
+        self.web_clients.remove(client)
+        self.web_clients_lock.release()
 
     def receiver(self):
         ''' receive serial data and push data into data_queue.
@@ -223,6 +237,8 @@ class RoverDriver:
             self.threads.append(t)
 
         # query user configurations setup
+        self.write(self.cmds['queryInternalLeverArm'])
+        time.sleep(0.1)
         self.write(self.cmds['queryIMURotationMatrix'])
 
         if self.handle_KeyboardInterrupt():
@@ -389,6 +405,12 @@ class RoverDriver:
             if data:
                 if self.app:
                     self.app.on_message(output_packet['name'], data, is_var_len_frame)
+
+                self.web_clients_lock.acquire()
+                for client in self.web_clients:
+                    client.on_driver_message(output_packet['name'], data, is_var_len_frame)
+                self.web_clients_lock.release()
+
                 self.packet_handler(output_packet['name'], data, is_var_len_frame)
         elif header.startswith('AF2006'): # some messages start with 'AF2006' are different decoding rule with message list in rover.json, so need to handle specially.
             self.msg_typeid_06_handler(frame)
@@ -415,26 +437,43 @@ class RoverDriver:
 
         # ref msg8.4, rover report the 'IMU rotation matrix' and 'GNSS antenna lever arm' messages.
         if sub_id == 0X0C and topic_tp == 0X0A: 
-            msg_060C0A = Msg_060C0A(frame)
-            # msg_060C0A.pack_msg_060D()
-            self.msgs['Msg_060C0A'] = msg_060C0A
-            imu_rotation_matrix = msg_060C0A.get_imu_rotation_matrix()
+            msg_060C_topic_0A = Msg_060C_topic_0A(frame)
+            # msg_060C_topic_0A.pack_msg_060D()
+            self.msgs['Msg_060C_topic_0A'] = msg_060C_topic_0A
+            imu_rotation_matrix = msg_060C_topic_0A.get_imu_rotation_matrix()
             # json_msg = json.dumps({ 'messageType' : 'event',  'data' : {'packetType' : 'IMURotationMatrix', 'packet' : imu_rotation_matrix }})
             '''
             todo:
-            1. update new msg_060C0A in self.msgs
+            1. update new msg_060C_topic_0A in self.msgs
             2. get_imu_rotation_matrix and send to web
             3. get_GNSS_lever_arm_center and send to web
             '''
             if self.app:
-                self.app.on_message( "IMURotationMatrix", imu_rotation_matrix, False)
-                # wrt_imu_center,lever_arm = msg_060C0A.get_GNSS_lever_arm_center()
+                self.app.on_message("IMURotationMatrix", imu_rotation_matrix, False)
+                # wrt_imu_center,lever_arm = msg_060C_topic_0A.get_GNSS_lever_arm_center()
+            self.web_clients_lock.acquire()
+            for client in self.web_clients:
+                client.on_driver_message("IMURotationMatrix", imu_rotation_matrix, False)
+            self.web_clients_lock.release()
+        elif sub_id == 0X0C and topic_tp == 0X0C: # Firmware version
+            len_fmt = '{0}B'.format(payload_len)
+            b = struct.pack(len_fmt, *payload)
+            data = collections.OrderedDict()
+            data['Firmware Version'] = b.decode() # bytes to string
+            if self.app:
+                self.app.on_message( "FV", data, False)
 
+            self.web_clients_lock.acquire()
+            for client in self.web_clients:
+                client.on_driver_message( "FV", data, False)
+            self.web_clients_lock.release()   
+        elif sub_id == 0X0C and topic_tp == 0X04: # handle internal lever-arm message.
+            pass
         else:
             pass
 
         # from pprint import pprint
-        # pprint (vars(msg_060C0A))
+        # pprint (vars(msg_060C_topic_0A))
         # print('********************')
         
     def handle_string_filed(self, value, payload, string_len):
@@ -708,6 +747,11 @@ class RoverDriver:
 
             if self.app:
                 self.app.on_message(TP_NAV, nav, False)
+
+            self.web_clients_lock.acquire()
+            for client in self.web_clients:
+                client.on_driver_message(TP_NAV, nav, False)
+            self.web_clients_lock.release()                     
             # print (json.dumps(nav))
             # print("***************")
         # elif (TP_SA == packet_type and TP_NCA in self.msgs) \
@@ -722,6 +766,11 @@ class RoverDriver:
             self.msgs[TP_SS] = data
             if self.app:
                 self.app.on_message(TP_SS, data, False)
+
+            self.web_clients_lock.acquire()
+            for client in self.web_clients:
+                client.on_driver_message(TP_SS, data, False)
+            self.web_clients_lock.release()                    
         elif TP_NCA == packet_type:
             data = collections.OrderedDict()
             data['IMU Status'] = 0
@@ -731,6 +780,11 @@ class RoverDriver:
             self.msgs[TP_SS] = data
             if self.app:
                 self.app.on_message(TP_SS, data, False)
+                
+            self.web_clients_lock.acquire()
+            for client in self.web_clients:
+                client.on_driver_message(TP_SS, data, False)
+            self.web_clients_lock.release()                    
         else:
             pass
 
@@ -739,10 +793,12 @@ class RoverDriver:
         Prase command message from web clint, 
         and send corresponding hex format command message to rover.
         '''
+        CMD_TP_EVENT = 'event'
         CMD_TP_QUERY = 'query'
         CMD_TP_SET = 'set'
         CMD_PRODUCT_ID = 'ProductID'
         CMD_ENGINE_VERSION = 'EngineVersion'
+        CMD_FIRMWARE_VERSION = 'FirmwareVersion'
         CMD_IMU_ROTATION_MATRIX = 'IMURotationMatrix'
         CMD_GNSS_ANTENNA_LEVER_ARM = 'GNSSAntennaLeverArm'
 
@@ -751,6 +807,8 @@ class RoverDriver:
                 self.write(self.cmds['queryProductId'])
             if message['data']['packetType'] == CMD_ENGINE_VERSION:
                 self.write(self.cmds['queryEngineVersion'])
+            if message['data']['packetType'] == CMD_FIRMWARE_VERSION:
+                self.write(self.cmds['queryFirmwareVersion'])
             if message['data']['packetType'] == CMD_IMU_ROTATION_MATRIX:
                 self.write(self.cmds['queryIMURotationMatrix'])
             if message['data']['packetType'] == CMD_GNSS_ANTENNA_LEVER_ARM:
@@ -758,11 +816,11 @@ class RoverDriver:
         elif message['messageType'] == CMD_TP_SET:
             if message['data']['packetType'] == CMD_IMU_ROTATION_MATRIX:
                 matrix = list(message['data']['packet']['C{0}'.format(i)] for i in range(9))
-                if 'Msg_060C0A' in self.msgs:
-                    msg_060C0A = self.msgs['Msg_060C0A']
-                    msg_060C0A.set_imu_rotation_matrix(matrix)
-                    msg_060C0A.pack_msg_060D()
-                    self.write(msg_060C0A.msg_060D_cmd)
+                if 'Msg_060C_topic_0A' in self.msgs:
+                    msg_060C_topic_0A = self.msgs['Msg_060C_topic_0A']
+                    msg_060C_topic_0A.set_imu_rotation_matrix(matrix)
+                    msg_060C_topic_0A.pack_msg_060D()
+                    self.write(msg_060C_topic_0A.msg_060D_cmd)
                 else:
                     self.write(self.cmds['queryIMURotationMatrix'])
 
@@ -775,11 +833,11 @@ class RoverDriver:
                     lever_arms[packet[i]['Antenna_ID']] = [packet[i]['LeverArm_X'],packet[i]['LeverArm_Y'],packet[i]['LeverArm_Z']]
                 # ensure lever-arm is sorted by Antenna_ID.
                 lever_arm = [lever_arms[k] for k in sorted(lever_arms.keys())] 
-                if 'Msg_060C0A' in self.msgs['Msg_060C0A']:      
-                    msg_060C0A = self.msgs['Msg_060C0A']
-                    msg_060C0A.set_GNSS_lever_arm_center(lever_arm, lever_arm_wrt_imu_center)
-                    msg_060C0A.pack_msg_060D()
-                    self.write(msg_060C0A.msg_060D_cmd)
+                if 'Msg_060C_topic_0A' in self.msgs['Msg_060C_topic_0A']:      
+                    msg_060C_topic_0A = self.msgs['Msg_060C_topic_0A']
+                    msg_060C_topic_0A.set_GNSS_lever_arm_center(lever_arm, lever_arm_wrt_imu_center)
+                    msg_060C_topic_0A.pack_msg_060D()
+                    self.write(msg_060C_topic_0A.msg_060D_cmd)
                 else:
                     self.write(self.cmds['queryGNSSAntennaLeverArm'])
 
