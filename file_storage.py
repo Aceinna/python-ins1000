@@ -23,17 +23,20 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
             self.userFilename = user['startLog']['fileName']
             self.userAccessToken = user['startLog']['access_token']
 
-        self.start_time = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        start_time = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         self.rover_properties = utility.load_configuration(os.path.join('setting', 'rover.json'))
         if not self.rover_properties:
             os._exit(1)
         if not os.path.exists('data/'):
             os.mkdir('data/')
         self.output_packets = self.rover_properties['userMessages']['outputPackets']
-        self.first_row = {}
+        self.log_file_rows = {}
         self.log_file_names = {}
         self.log_files = {}
         self.msgs_need_to_log = []
+        self.user_log_file_rows = {}
+        self.user_log_file_names = {}
+        self.user_log_files = {}
 
         if user:
             with open('tempLogFiles.json', 'r') as outfile:
@@ -49,8 +52,8 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
                         self.msgs_need_to_log.append(packet['name'])
                     else:
                         continue
-                    self.first_row[packet['name']] = 0
-                    self.log_file_names[packet['name']] = packet['name'] +'-' + self.start_time + '.csv'
+                    self.log_file_rows[packet['name']] = 0
+                    self.log_file_names[packet['name']] = packet['name'] +'-' + start_time + '.csv'
                     self.log_files[packet['name']] = open('data/' + self.log_file_names[packet['name']], 'w')
 
                     entry = {packet['name']:self.log_file_names[packet['name']]}
@@ -75,11 +78,11 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
         pass
         # Is it necessary to create a new file to log when replug serial connector?
 
-        # self.start_time = datetime.datetime.now().strftime('%Y%m%d_%H_%M_%S')
+        # start_time = datetime.datetime.now().strftime('%Y%m%d_%H_%M_%S')
         # try:
         #     for packet in self.output_packets:
-        #         self.first_row[packet['name']] = 0
-        #         self.log_file_names[packet['name']] = packet['name'] +'-' + self.start_time + '.csv'
+        #         self.log_file_rows[packet['name']] = 0
+        #         self.log_file_names[packet['name']] = packet['name'] +'-' + start_time + '.csv'
         #         self.log_files[packet['name']] = open('data/' + self.log_file_names[packet['name']], 'w')# just log Compact Navigation Message
         # except:
         #     pass
@@ -100,21 +103,38 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
     def on_exit(self):
         pass
 
+    def start_user_log(self, user_id):
+        start_time = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        for packet in self.output_packets:
+            if packet['name'] in self.msgs_need_to_log:
+                self.user_log_file_rows[packet['name']] = 0
+                self.user_log_file_names[packet['name']] = user_id + '_' + packet['name'] +'-' + start_time + '.csv'
+                self.user_log_files[packet['name']] = open('data/' + self.user_log_file_names[packet['name']], 'w')
+
+    def stop_user_log(self):
+        if len(self.user_log_file_rows) == 0:
+            return
+
+        for i, (k, v) in enumerate(self.user_log_files.items()):
+            v.close()
+
+        # upload to cloud if necessary.
+
+        self.user_log_file_rows.clear()
+        self.user_log_file_names.clear()
+        self.user_log_files.clear()
+        pass
+
     def log(self, data, packet_type):
         ''' Parse the data, read in from the unit, and generate a data file using
             the json properties file to create a header and specify the precision
             of the data in the resulting data file.
         '''
-        if not self.rover_properties:
-            return
-
-        output_packet = next((x for x in self.rover_properties['userMessages']['outputPackets'] if x['name'] == packet_type), None)
+        output_packet = next((x for x in self.output_packets if x['name'] == packet_type), None)
 
         '''Write row of CSV file based on data received.  Uses dictionary keys for column titles
         '''
-        if not self.first_row[packet_type]:
-            self.first_row[packet_type] = 1
-
+        if self.log_file_rows[packet_type] == 0 or (len(self.user_log_file_rows) > 0 and self.user_log_file_rows[packet_type] == 0):
             # Loop through each item in the data dictionary and create a header from the json
             #   properties that correspond to the items in the dictionary
             labels = ''
@@ -135,9 +155,11 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
             labels = labels[:-1]
             header = labels + '\n'
         else:
-            self.first_row[packet_type] += 1
             header = ''
 
+        self.log_file_rows[packet_type] += 1
+        if len(self.user_log_file_rows) > 0:
+            self.user_log_file_rows[packet_type] += 1
 
         # Loop through the items in the data dictionary and append to an output string
         #   (with precision based on the data type defined in the json properties file)
@@ -167,23 +189,30 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
         # 
         str = str[:-1]
         str = str + '\n'
-        self.log_files[packet_type].write(header+str)
+
+        if self.log_file_rows[packet_type] == 1:
+            self.log_files[packet_type].write(header+str)
+        else:
+            self.log_files[packet_type].write(str)
         self.log_files[packet_type].flush()
+
+        if len(self.user_log_file_rows) > 0:
+            if self.user_log_file_rows[packet_type] == 1:
+                self.user_log_files[packet_type].write(header+str)
+            else:
+                self.user_log_files[packet_type].write(str)
+            self.user_log_files[packet_type].flush()
 
     def log_var_len(self, data, packet_type):
         ''' Parse the data, read in from the unit, and generate a data file using
             the json properties file to create a header and specify the precision
             of the data in the resulting data file.
         '''
-        if not self.rover_properties:
-            return
-
-        output_packet = next((x for x in self.rover_properties['userMessages']['outputPackets'] if x['name'] == packet_type), None)
+        output_packet = next((x for x in self.output_packets if x['name'] == packet_type), None)
 
         '''Write row of CSV file based on data received.  Uses dictionary keys for column titles
         '''
-        if not self.first_row[packet_type]:
-            self.first_row[packet_type] = 1
+        if self.log_file_rows[packet_type] == 0 or (len(self.user_log_file_rows) > 0 and self.user_log_file_rows[packet_type] == 0):
 
             # Loop through each item in the data dictionary and create a header from the json
             #   properties that correspond to the items in the dictionary
@@ -199,8 +228,11 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
             labels = labels[:-1]
             header = labels + '\n'
         else:
-            self.first_row[packet_type] += 1
             header = ''
+
+        self.log_file_rows[packet_type] += 1
+        if len(self.user_log_file_rows) > 0:
+            self.user_log_file_rows[packet_type] += 1
 
         # Loop through the items in the data dictionary and append to an output string
         #   (with precision based on the data type defined in the json properties file)
@@ -266,11 +298,24 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
                 str = const_str + var_str
                 str = str[:-1]
                 str = str + '\n'
-                self.log_files[packet_type].write(header+str)
+                    
+                if self.log_file_rows[packet_type] == 1:
+                    self.log_files[packet_type].write(header+str)
+                else:
+                    self.log_files[packet_type].write(str)
+                self.log_files[packet_type].flush()
+
+                if len(self.user_log_file_rows) > 0:
+                    if self.user_log_file_rows[packet_type] == 1:
+                        self.user_log_files[packet_type].write(header+str)
+                    else:
+                        self.user_log_files[packet_type].write(str)
+                    self.user_log_files[packet_type].flush()
+
                 header = ''
                 str = ''
                 var_str = ''
-                self.log_files[packet_type].flush()
+
 
     ''' Upload CSV's to Azure container.
     '''

@@ -805,13 +805,13 @@ class RoverDriver:
         if message['messageType'] == CMD_TP_QUERY:
             if message['data']['packetType'] == CMD_PRODUCT_ID:
                 self.write(self.cmds['queryProductId'])
-            if message['data']['packetType'] == CMD_ENGINE_VERSION:
+            elif message['data']['packetType'] == CMD_ENGINE_VERSION:
                 self.write(self.cmds['queryEngineVersion'])
-            if message['data']['packetType'] == CMD_FIRMWARE_VERSION:
+            elif message['data']['packetType'] == CMD_FIRMWARE_VERSION:
                 self.write(self.cmds['queryFirmwareVersion'])
-            if message['data']['packetType'] == CMD_IMU_ROTATION_MATRIX:
+            elif message['data']['packetType'] == CMD_IMU_ROTATION_MATRIX:
                 self.write(self.cmds['queryIMURotationMatrix'])
-            if message['data']['packetType'] == CMD_GNSS_ANTENNA_LEVER_ARM:
+            elif message['data']['packetType'] == CMD_GNSS_ANTENNA_LEVER_ARM:
                 self.write(self.cmds['queryGNSSAntennaLeverArm'])
         elif message['messageType'] == CMD_TP_SET:
             if message['data']['packetType'] == CMD_IMU_ROTATION_MATRIX:
