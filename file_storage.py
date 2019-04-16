@@ -104,26 +104,37 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
         pass
 
     def start_user_log(self, user_id):
-        start_time = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-        for packet in self.output_packets:
-            if packet['name'] in self.msgs_need_to_log:
-                self.user_log_file_rows[packet['name']] = 0
-                self.user_log_file_names[packet['name']] = user_id + '_' + packet['name'] +'-' + start_time + '.csv'
-                self.user_log_files[packet['name']] = open('data/' + self.user_log_file_names[packet['name']], 'w')
+        try:
+            if len(self.user_log_file_rows) > 0:
+                return 1
+            start_time = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+            for packet in self.output_packets:
+                if packet['name'] in self.msgs_need_to_log:
+                    self.user_log_file_rows[packet['name']] = 0
+                    self.user_log_file_names[packet['name']] = user_id + '_' + packet['name'] +'-' + start_time + '.csv'
+                    self.user_log_files[packet['name']] = open('data/' + self.user_log_file_names[packet['name']], 'w')
+            return 0
+        except Exception as e:
+            print(e)
+            return 2
 
     def stop_user_log(self):
-        if len(self.user_log_file_rows) == 0:
-            return
+        try:
+            if len(self.user_log_file_rows) == 0:
+                return 1 # driver hasn't started logging files yet.
 
-        for i, (k, v) in enumerate(self.user_log_files.items()):
-            v.close()
+            for i, (k, v) in enumerate(self.user_log_files.items()):
+                v.close()
 
-        # upload to cloud if necessary.
+            # start a thread to upload logs to cloud here if necessary.
 
-        self.user_log_file_rows.clear()
-        self.user_log_file_names.clear()
-        self.user_log_files.clear()
-        pass
+            self.user_log_file_rows.clear()
+            self.user_log_file_names.clear()
+            self.user_log_files.clear()
+            return 0
+        except Exception as e:
+            print(e)
+            return 2
 
     def log(self, data, packet_type):
         ''' Parse the data, read in from the unit, and generate a data file using

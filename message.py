@@ -24,7 +24,9 @@ class Msg_060C_topic_0A(object):
         self.imu_rotation_matrix = []
         self.output_position_offset = []
         self.smooth_mode = 0
-        self.GNSS_lever_arm = [] #shape: [antenna_num][3]
+        self.GNSS_lever_arm_center = [] #shape: [antenna_num][3]
+        self.GNSS_lever_arm_housing_mark = [] #shape: [antenna_num][3]
+        self.internal_lever_arm = []
         self.GNSS_lever_arm_uncertainty = []
         self.ICD_configuration = []
         # DMI configurations
@@ -39,7 +41,14 @@ class Msg_060C_topic_0A(object):
         self.DMI_exists = 0
         # used to packet the '8.4 User Configuration Setup' message.
         self.msg_060D_cmd = ''
-        
+
+        self.SCALING_MAX_OUTPUT_RATE = 1.0e-1
+        self.SCALING_OUTPUT_POSITION_OFFSET = 1.0e-4
+        self.SCALING_LEVER_ARM = 1.0e-4
+        self.SCALING_LEVER_ARM_UNCERTAINTY = 1.0e-2
+        self.SCALING_DMI_LEVER_ARM = 1.0e-4
+        self.SCALING_DMI_LEVER_ARM_UNCERTAINTY = 1.0e-2
+
         self.unpack_msg_060C_topic_0A()
         pass
 
@@ -83,8 +92,7 @@ class Msg_060C_topic_0A(object):
         self.max_unaided_time = payload[i+1]*256+payload[i] # uint16_t
         i+=2
 
-        scaling = 1.0e-1
-        self.max_output_rate = int((payload[i+1]*256+payload[i])*scaling) # uint16_t
+        self.max_output_rate = payload[i+1]*256+payload[i] # uint16_t
         i+=2
 
         v = struct.pack('72B', *payload[i:i+72]) # double[3][3]
@@ -92,8 +100,7 @@ class Msg_060C_topic_0A(object):
         i+=72
 
         v = struct.pack('12B', *payload[i:i+12]) # # int32_t[3]
-        scaling = 1.0e-4
-        self.output_position_offset = list(p*scaling for p in struct.unpack('<3i', v))
+        self.output_position_offset = list(struct.unpack('<3i', v))
         i+=12
 
         if self.extended_version_flag:
@@ -104,18 +111,18 @@ class Msg_060C_topic_0A(object):
         fmt = '{0}B'.format(4*self.antenna_num*3) 
         v = struct.pack(fmt, *payload[i:i+4*self.antenna_num*3]) 
         fmt = '<{0}i'.format(self.antenna_num*3) #int32[antenna_num][3]
-        scaling = 1.0e-4
-        self.GNSS_lever_arm = list(p*scaling for p in struct.unpack(fmt, v))
-        # l = list(p*scaling for p in struct.unpack(fmt, v))
-        self.GNSS_lever_arm = ([self.GNSS_lever_arm[n:n + 3] for n in range(0, len(self.GNSS_lever_arm), 3)]) #eg.[[0.2819, 0.0036, -0.0673], [-0.3277, 0.0036, -0.0673]]
+        l = list(struct.unpack(fmt, v))
+        if self.flags_leverarm_from_imu_center:
+            self.GNSS_lever_arm_center = ([l[n:n + 3] for n in range(0, len(l), 3)]) #eg.[[0.2819, 0.0036, -0.0673], [-0.3277, 0.0036, -0.0673]]
+        else:
+            self.GNSS_lever_arm_housing_mark = ([l[n:n + 3] for n in range(0, len(l), 3)]) #eg.[[0.2819, 0.0036, -0.0673], [-0.3277, 0.0036, -0.0673]]
         i += 4*self.antenna_num*3
 
         if self.extended_version_flag:
             fmt = '{0}B'.format(2*self.antenna_num)
             v = struct.pack(fmt, *payload[i:i+2*self.antenna_num]) 
             fmt = '<{0}H'.format(self.antenna_num) #uint16_t[nA]
-            scaling = 1.0e-2
-            self.GNSS_lever_arm_uncertainty = list(p*scaling for p in struct.unpack(fmt, v))
+            self.GNSS_lever_arm_uncertainty = list(struct.unpack(fmt, v))
             i += 2*self.antenna_num
 
         if self.ICD_num > 0:
@@ -134,14 +141,12 @@ class Msg_060C_topic_0A(object):
             i+=8
 
             v = struct.pack('12B', *payload[i:i+12]) # int32_t[3]
-            scaling = 1.0e-4
-            self.DMI_lever_arm = list(p*scaling for p in struct.unpack('<3i', v))
+            self.DMI_lever_arm = list(struct.unpack('<3i', v))
             i+=12
 
             if self.extended_version_flag:
                 v = struct.pack('2B', *payload[i:i+2]) # uint16_t
-                scaling = 1.0e-2
-                self.DMI_lever_arm_uncertainty = struct.unpack('<H', v)[0]*scaling
+                self.DMI_lever_arm_uncertainty = struct.unpack('<H', v)[0]
                 i+=2
                 self.DMI_options = payload[i]
 
@@ -167,39 +172,39 @@ class Msg_060C_topic_0A(object):
         self.msg_060D_cmd.append(self.min_vel) # uint8_t
         v = self.max_unaided_time.to_bytes(2, byteorder='little', signed=False) # uint16_t
         self.msg_060D_cmd += v
-        scaling = 10
-        v = (self.max_output_rate*scaling).to_bytes(2, byteorder='little', signed=False) # uint16_t
+
+        v = (self.max_output_rate).to_bytes(2, byteorder='little', signed=False) # uint16_t
         # v = (1051).to_bytes(2, byteorder='little', signed=False) # uint16_t
         self.msg_060D_cmd += v
 
-        v = struct.pack('<9d', *self.imu_rotation_matrix) # double[3][3]
+        v = struct.pack('<9d', *(self.imu_rotation_matrix)) # double[3][3]
         self.msg_060D_cmd += v
 
-        scaling = 10000
-        v = struct.pack('<3i', *(list(int(p*scaling) for p in self.output_position_offset))) # int32_t[3]
+        v = struct.pack('<3i', *(list(int(p) for p in self.output_position_offset))) # int32_t[3]
         self.msg_060D_cmd += v
 
         if self.extended_version_flag:
             self.msg_060D_cmd.append(self.smooth_mode) # uint8_t
 
         fmt = '<{0}i'.format(self.antenna_num*3) #int32_t[antenna_num][3]
-        scaling = 10000
-
         v=[]
-        for lever_arm in self.GNSS_lever_arm:
-            v+=lever_arm
-        v = struct.pack(fmt, *(list(int(p*scaling) for p in v))) 
+        if self.flags_leverarm_from_imu_center:
+            for lever_arm in self.GNSS_lever_arm_center:
+                v+=lever_arm
+        else:
+            for lever_arm in self.GNSS_lever_arm_housing_mark:
+                v+=lever_arm
+        v = struct.pack(fmt, *v) 
         self.msg_060D_cmd += v
 
         if self.extended_version_flag: #uint16_t[nA]
             fmt = '<{0}H'.format(self.antenna_num)
-            scaling = 100
-            v = struct.pack(fmt, *(list(int(p*scaling) for p in self.GNSS_lever_arm_uncertainty))) 
+            v = struct.pack(fmt, *(self.GNSS_lever_arm_uncertainty))
             self.msg_060D_cmd += v
 
         if self.ICD_num > 0:
             fmt = '<{0}B'.format(2*self.ICD_num) # uint8_t[ICD_num*2]
-            v = struct.pack(fmt, *(list(p for p in self.ICD_configuration))) 
+            v = struct.pack(fmt, *(self.ICD_configuration))
             self.msg_060D_cmd += v
 
 
@@ -211,13 +216,11 @@ class Msg_060C_topic_0A(object):
             v = struct.pack('<d', self.DMI_scale_factor) # double
             self.msg_060D_cmd += v
 
-            scaling = 10000
-            v = struct.pack('<3i', *(list(int(p*scaling) for p in self.DMI_lever_arm))) # int32_t[3]
+            v = struct.pack('<3i', *(self.DMI_lever_arm)) # int32_t[3]
             self.msg_060D_cmd += v
 
             if self.extended_version_flag:
-                scaling = 100
-                v = struct.pack('<H', int(self.DMI_lever_arm_uncertainty*scaling)) # uint16_t
+                v = struct.pack('<H', self.DMI_lever_arm_uncertainty) # uint16_t
                 self.msg_060D_cmd += v
                 self.msg_060D_cmd.append(self.DMI_options) # uint8_t
 
@@ -231,7 +234,19 @@ class Msg_060C_topic_0A(object):
         self.msg_060D_cmd.append(result[1]) 
         self.msg_060D_cmd.append(result[0]) 
         pass
-    
+
+    def get_max_output_rate(self):
+        return self.max_output_rate * self.SCALING_MAX_OUTPUT_RATE
+
+    def set_max_output_rate(self, max_output_rate):
+        self.max_output_rate = int(max_output_rate / self.SCALING_MAX_OUTPUT_RATE)
+
+    def get_output_position_offset(self):
+        return list(p*self.SCALING_OUTPUT_POSITION_OFFSET for p in self.output_position_offset)
+
+    def set_output_position_offset(self, utput_position_offset):
+        self.output_position_offset = list(int(p/self.SCALING_OUTPUT_POSITION_OFFSET) for p in utput_position_offset)
+
     def get_imu_rotation_matrix(self):
         data = collections.OrderedDict()
         for i, c in enumerate(self.imu_rotation_matrix):
@@ -244,14 +259,53 @@ class Msg_060C_topic_0A(object):
         self.imu_rotation_matrix = matrix
 
     def get_GNSS_lever_arm_center(self):
-        # return self.flags_leverarm_from_imu_center, self.GNSS_lever_arm
-        data = collections.OrderedDict()
-        data["Antenna_num"] = self.antenna_num
-        pass
+        GNSS_lever_arm_center = []
+        for an in range(self.antenna_num):
+            GNSS_lever_arm_center.append([p*self.SCALING_LEVER_ARM for p in self.GNSS_lever_arm_center[an] ])
+        return GNSS_lever_arm_center
 
-    def set_GNSS_lever_arm_center(self, lever_arm, wrt_imu_center=True):
-        if len(lever_arm) != self.antenna_num*3:
+    # center = housing mark + internal
+    def set_GNSS_lever_arm_center(self, lever_arm):
+        if len(lever_arm) != self.antenna_num or len(lever_arm[0]) != 3:
             raise ValueError("Size of GNSS Lever arm is incorrect!")
-        self.GNSS_lever_arm = lever_arm
-        self.flags_leverarm_from_imu_center = wrt_imu_center
+
+        GNSS_lever_arm_center = []
+        for an in range(self.antenna_num):
+            GNSS_lever_arm_center.append([int(p/self.SCALING_LEVER_ARM) for p in lever_arm[an] ])
+        self.GNSS_lever_arm_center = GNSS_lever_arm_center
+
+        self.GNSS_lever_arm_housing_mark = []
+        for an in range(self.antenna_num):
+            self.GNSS_lever_arm_housing_mark.append([self.GNSS_lever_arm_center[an][i] - self.internal_lever_arm[i] for i in range(3) ])
+
+    def get_GNSS_lever_arm_housing_mark(self):
+        GNSS_lever_arm_housing_mark = []
+        if len(self.GNSS_lever_arm_housing_mark) == 0:
+            return GNSS_lever_arm_housing_mark
+        for an in range(self.antenna_num):
+            GNSS_lever_arm_housing_mark.append([p*self.SCALING_LEVER_ARM for p in self.GNSS_lever_arm_housing_mark[an] ])
+        return GNSS_lever_arm_housing_mark
+
+    def set_GNSS_lever_arm_housing_mark(self, lever_arm):
+        if len(lever_arm) != self.antenna_num or len(lever_arm[0]) != 3:
+            raise ValueError("Size of GNSS Lever arm is incorrect!")
+
+        GNSS_lever_arm_housing_mark = []
+        for an in range(self.antenna_num):
+            GNSS_lever_arm_housing_mark.append([int(p/self.SCALING_LEVER_ARM) for p in lever_arm[an] ])
+        self.GNSS_lever_arm_housing_mark = GNSS_lever_arm_housing_mark
+
+        self.GNSS_lever_arm_center = []
+        for an in range(self.antenna_num):
+            self.GNSS_lever_arm_center.append([self.GNSS_lever_arm_housing_mark[an][i] + self.internal_lever_arm[i] for i in range(3) ])
+
+    def update_GNSS_lever_arm_by_internal_lever_arm(self, internal_lever_arm):
+        self.internal_lever_arm = [int(p/self.SCALING_LEVER_ARM) for p in internal_lever_arm]
+
+        if self.flags_leverarm_from_imu_center:
+            for an in range(self.antenna_num):
+                self.GNSS_lever_arm_housing_mark.append([self.GNSS_lever_arm_center[an][i] - self.internal_lever_arm[i] for i in range(3) ])
+        else:
+            for an in range(self.antenna_num):
+                self.GNSS_lever_arm_center.append([self.GNSS_lever_arm_housing_mark[an][i] + self.internal_lever_arm[i] for i in range(3) ])
 

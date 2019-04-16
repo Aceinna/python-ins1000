@@ -659,9 +659,9 @@
         "send2web": 1
       },
       {
-        "name": "FV",
-        "header": "AF20060C",
-        "description": "Firmware Version Message.",
+        "name": "UserConfiguration",
+        "header": "NONE",
+        "description": "System response for User Configuration",
         "save2file": 0,
         "send2web": 1
       }
