@@ -107,6 +107,9 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
         try:
             if len(self.user_log_file_rows) > 0:
                 return 1
+
+            if not isinstance(user_id, str):
+                user_id = str(user_id)
             start_time = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
             for packet in self.output_packets:
                 if packet['name'] in self.msgs_need_to_log:
@@ -160,7 +163,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
                 if unitStr == '':
                     labels = labels + '{0:s},'.format(dataStr)
                 else:
-                    labels = labels + '{0:s}({1:s}),'.format(dataStr, unitStr)
+                    labels = labels + '{0:s} ({1:s}),'.format(dataStr, unitStr)
 
             # Remove the comma at the end of the string and append a new-line character
             labels = labels[:-1]
@@ -234,7 +237,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
                 if unitStr == '':
                     labels = labels + '{0:s},'.format(dataStr)
                 else:
-                    labels = labels + '{0:s}({1:s}),'.format(dataStr, unitStr)
+                    labels = labels + '{0:s} ({1:s}),'.format(dataStr, unitStr)
             # Remove the comma at the end of the string and append a new-line character
             labels = labels[:-1]
             header = labels + '\n'

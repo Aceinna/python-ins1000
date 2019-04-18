@@ -39,6 +39,9 @@ class Msg_060C_topic_0A(object):
         self.extended_version_flag = 0
         self.antenna_num = 0
         self.DMI_exists = 0
+        # get from self.flags
+        self.flags_init_heading_from_GNSS_vel = True
+        self.flags_leverarm_from_imu_center
         # used to packet the '8.4 User Configuration Setup' message.
         self.msg_060D_cmd = ''
 
@@ -63,6 +66,7 @@ class Msg_060C_topic_0A(object):
         MASK_ANTENNA_NUM = 3
         MASK_EXTENDED_VERSION_FLAG = 8
         MASK_DMI_EXISTS = 4
+        MASK_FLAGS_INIT_HEADING_FROM_GNSS_VEL = 1
         MASK_FLAGS_LEVERARM_FROM_IMU_CENTER = 4
 
         i = 0
@@ -79,6 +83,8 @@ class Msg_060C_topic_0A(object):
         i+=1
 
         self.flags = payload[i] # uint8_t
+        # if flags_init_heading_from_GNSS_vel is True, means Enable "Initialize heading from GNSS velocity".        
+        self.flags_init_heading_from_GNSS_vel = (self.flags & MASK_FLAGS_INIT_HEADING_FROM_GNSS_VEL == 0)   
         # if flags_leverarm_from_imu_center is False, means leverarm is w.r.t housing mark        
         self.flags_leverarm_from_imu_center = (self.flags & MASK_FLAGS_LEVERARM_FROM_IMU_CENTER == 0)   
         i+=1

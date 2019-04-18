@@ -233,7 +233,7 @@
         "payload": [
           {
             "type": "double",
-            "name": "System time",
+            "name": "Time of week",
             "unit": "s"
           },
           {
@@ -253,17 +253,17 @@
           },
           {
             "type": "float",
-            "name": "Velocity_N",
+            "name": "Vel N",
             "unit": "m/s"
           },
           {
             "type": "float",
-            "name": "Velocity_E",
+            "name": "Vel E",
             "unit": "m/s"
           },
           {
             "type": "float",
-            "name": "Velocity_D",
+            "name": "Vel D",
             "unit": "m/s"
           },
           {
@@ -363,7 +363,7 @@
           },
           {
             "type": "uint16",
-            "name": "GPS week number",
+            "name": "GPS week",
             "unit": ""
           },
           {
@@ -496,13 +496,18 @@
         "send2web": 1,
         "payload": [
           {
-            "type": "double",
+            "type": "uint32",
             "name": "System time",
             "unit": "s"
           },
           {
+            "type": "double",
+            "name": "Time of week",
+            "unit": "s"
+          },
+          {
             "type": "uint16",
-            "name": "GPS week number",
+            "name": "GPS week",
             "unit": ""
           },
           {
@@ -562,17 +567,17 @@
           },
           {
             "type": "float",
-            "name": "Velocity_N",
+            "name": "Vel N",
             "unit": "m/s"
           },
           {
             "type": "float",
-            "name": "Velocity_E",
+            "name": "Vel E",
             "unit": "m/s"
           },
           {
             "type": "float",
-            "name": "Velocity_D",
+            "name": "Vel D",
             "unit": "m/s"
           },
           {

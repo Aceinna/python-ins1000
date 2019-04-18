@@ -435,21 +435,14 @@ class RoverDriver:
         # ref msg8.4, rover report the 'IMU rotation matrix' and 'GNSS antenna lever arm' messages.
         if sub_id == 0X0C and topic_tp == 0X0A: 
             msg_060C_topic_0A = Msg_060C_topic_0A(frame)
-
             # update GNSS lever-arm by internal lever-arm.
             if 'Internal Lever-arm' in self.msgs:
                 msgs_internal_lever_arm = self.msgs['Internal Lever-arm']
                 if msgs_internal_lever_arm['Validity']:
                     internal_lever_arm = msgs_internal_lever_arm['Internal lever-arm vector']
                     msg_060C_topic_0A.update_GNSS_lever_arm_by_internal_lever_arm(internal_lever_arm)
-
             self.msgs['Msg_060C_topic_0A'] = msg_060C_topic_0A
-            '''
-            todo:
-            1. update new msg_060C_topic_0A in self.msgs
-            2. get_imu_rotation_matrix and send to web
-            3. get_GNSS_lever_arm_center and send to web
-            '''
+            # pack GNSS lever-arm json message.
             imu_rotation_matrix = msg_060C_topic_0A.get_imu_rotation_matrix()
             lever_arm_center = msg_060C_topic_0A.get_GNSS_lever_arm_center()
             lever_arm_housing_mark = msg_060C_topic_0A.get_GNSS_lever_arm_housing_mark()
@@ -490,7 +483,7 @@ class RoverDriver:
             # json_msg = json.dumps({ 'messageType' : 'event',  'data' : {'packetType' : 'IMURotationMatrix', 'packet' : imu_rotation_matrix }})
             if self.app:
                 self.app.on_message("IMURotationMatrix", imu_rotation_matrix, False)
-                self.app.on_message("GNSSAntennaLeverArm", data, False)
+                self.app.on_message("GNSSAntennaLeverArm", data, True)
             self.web_clients_lock.acquire()
             for client in self.web_clients:
                 client.on_driver_message("IMURotationMatrix", imu_rotation_matrix, False)
@@ -519,12 +512,12 @@ class RoverDriver:
             data = collections.OrderedDict()
             data['Firmware Version'] = b.decode() # bytes to string
             if self.app:
-                self.app.on_message( "FV", data, False)
+                self.app.on_message( "FirmwareVersion", data, False)
 
             self.web_clients_lock.acquire()
             for client in self.web_clients:
-                client.on_driver_message( "FV", data, False)
-            self.web_clients_lock.release()   
+                client.on_driver_message( "FirmwareVersion", data, False)
+            self.web_clients_lock.release()
         elif sub_id == 0X06: # System Response
             msg_type_request = payload[6]
             msg_sub_id_request = payload[7]
@@ -795,8 +788,9 @@ class RoverDriver:
             euler_angle = utility.cal_attitude(q0, q1, q2, q3)
 
             nav = collections.OrderedDict()
-            nav['System time'] = self.msgs[TP_CNM]['System time']
-            nav['GPS week number'] = self.msgs[TP_CNM]['GPS week number']
+            nav['System time'] = int(self.msgs[TP_KFN]['System time'])
+            nav['Time of week'] = self.msgs[TP_CNM]['Time of week']
+            nav['GPS week'] = self.msgs[TP_CNM]['GPS week']
             nav['GPS time'] = self.msgs[TP_KFN]['GPS time']
             nav['Position mode'] = self.nav_pos_vel_mode[self.msgs[TP_KFN]['Position mode']]
             nav['Latitude'] = self.msgs[TP_CNM]['Latitude']
@@ -808,9 +802,9 @@ class RoverDriver:
             nav['Position RMS-D'] = pos_rms_d
             nav['Position RMS'] = math.sqrt(math.pow(pos_rms_n,2)+math.pow(pos_rms_e,2)+math.pow(pos_rms_d,2))
             nav['Velocity mode'] = self.nav_pos_vel_mode[self.msgs[TP_KFN]['Velocity mode']]
-            nav['Velocity_N'] = self.msgs[TP_CNM]['Velocity_N']
-            nav['Velocity_E'] = self.msgs[TP_CNM]['Velocity_E']
-            nav['Velocity_D'] = self.msgs[TP_CNM]['Velocity_D']
+            nav['Vel N'] = self.msgs[TP_CNM]['Vel N']
+            nav['Vel E'] = self.msgs[TP_CNM]['Vel E']
+            nav['Vel D'] = self.msgs[TP_CNM]['Vel D']
             nav['Velocity RMS-N'] = vel_rms_n
             nav['Velocity RMS-E'] = vel_rms_e
             nav['Velocity RMS-D'] = vel_rms_d
@@ -947,16 +941,16 @@ class RoverDriver:
 
 
 if __name__ == '__main__':
-    frame = bytearray(b'\xAF\x20\x06\x0C\xB2\x00\x0A\x0A\x01\x1C\x04\x3C\x00\x1B\x04\x00\x00\x00\x00\x00\x00\xF0\x3F\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xF0\x3F\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xF0\x3F\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x0B\x00\x00\x24\x00\x00\x00\x5F\xFD\xFF\xFF\x33\xF3\xFF\xFF\x24\x00\x00\x00\x5F\xFD\xFF\xFF\x01\x00\x01\x00\x01\x82\x02\x82\x03\x82\x04\x82\x05\x00\x06\x82\x07\x00\x08\x00\x09\x82\x0A\x80\x0B\x00\x0C\x00\x0D\x82\x0E\x00\x0F\x00\x10\x82\x11\x00\x12\x82\x13\x82\x14\x00\x15\x00\x16\x82\x17\x00\x18\x00\x19\x00\x1A\x00\x1B\x00\x1C\x00\xF9\x38')
-    driver = RoverDriver()
-    driver.msg_typeid_06_handler(frame)
-    frame = bytearray(b'\xAF\x20\x06\x0C\x1A\x00\x04\x01\x17\x48\x50\xFC\x18\x73\x97\xBF\x92\xCB\x7F\x48\xBF\x7D\x6D\x3F\xC3\xD3\x2B\x65\x19\xE2\x98\xBF\x15\x9F')
-    driver.msg_typeid_06_handler(frame)
+    # frame = bytearray(b'\xAF\x20\x06\x0C\xB2\x00\x0A\x0A\x01\x1C\x04\x3C\x00\x1B\x04\x00\x00\x00\x00\x00\x00\xF0\x3F\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xF0\x3F\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xF0\x3F\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03\x0B\x00\x00\x24\x00\x00\x00\x5F\xFD\xFF\xFF\x33\xF3\xFF\xFF\x24\x00\x00\x00\x5F\xFD\xFF\xFF\x01\x00\x01\x00\x01\x82\x02\x82\x03\x82\x04\x82\x05\x00\x06\x82\x07\x00\x08\x00\x09\x82\x0A\x80\x0B\x00\x0C\x00\x0D\x82\x0E\x00\x0F\x00\x10\x82\x11\x00\x12\x82\x13\x82\x14\x00\x15\x00\x16\x82\x17\x00\x18\x00\x19\x00\x1A\x00\x1B\x00\x1C\x00\xF9\x38')
+    # driver = RoverDriver()
+    # driver.msg_typeid_06_handler(frame)
+    # frame = bytearray(b'\xAF\x20\x06\x0C\x1A\x00\x04\x01\x17\x48\x50\xFC\x18\x73\x97\xBF\x92\xCB\x7F\x48\xBF\x7D\x6D\x3F\xC3\xD3\x2B\x65\x19\xE2\x98\xBF\x15\x9F')
+    # driver.msg_typeid_06_handler(frame)
 
     # message = '''{"messageType":"set","data":{"packetType":"IMURotationMatrix","packet":{"C0":11,"C1":10,"C2":10,"C3":10,"C4":11,"C5":10,"C6":10,"C7":10,"C8":11}}}'''
-    message = '''{"messageType":"set","data":{"packetType":"GNSSAntennaLeverArm","packet":[{"Antenna_num":2,"LeverArm_WRT":"IMU Center"},{"Antenna_ID":0,"LeverArm_X":0.4,"LeverArm_Y":0.5,"LeverArm_Z":-0.6},{"Antenna_ID":1,"LeverArm_X":0.1,"LeverArm_Y":0.2,"LeverArm_Z":-0.3}]}}'''
-    message = json.loads(message)
-    driver.handle_cmd_msg(message)
+    # message = '''{"messageType":"set","data":{"packetType":"GNSSAntennaLeverArm","packet":[{"Antenna_num":2,"LeverArm_WRT":"IMU Center"},{"Antenna_ID":0,"LeverArm_X":0.4,"LeverArm_Y":0.5,"LeverArm_Z":-0.6},{"Antenna_ID":1,"LeverArm_X":0.1,"LeverArm_Y":0.2,"LeverArm_Z":-0.3}]}}'''
+    # message = json.loads(message)
+    # driver.handle_cmd_msg(message)
 
     pass
 
