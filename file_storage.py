@@ -121,6 +121,12 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
             print(e)
             return 2
 
+    def upload_to_azure_task(self, log_files):
+        for i, (k, v) in enumerate(log_files.items()): # k: packet type; v: log file name
+            self.uploadtoAzure(v)
+
+        pass
+
     def stop_user_log(self):
         try:
             if len(self.user_log_file_rows) == 0:
@@ -130,6 +136,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
                 v.close()
 
             # start a thread to upload logs to cloud here if necessary.
+            threading.Thread(target=self.upload_to_azure_task(self.user_log_file_names.copy())).start()
 
             self.user_log_file_rows.clear()
             self.user_log_file_names.clear()

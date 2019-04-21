@@ -61,6 +61,10 @@ class WSHandler(tornado.websocket.WebSocketHandler):
         data_lock.release()
 
     def on_message(self, message):
+        if driver.connection_status == 0:
+            json_msg = json.dumps({ 'messageType' : 'event',  'data' : {'packetType' : 'ConnectionStatus', 'packet' : {'ConnectionStatus' : 0} }})
+            self.write_message(json_msg)
+            return
         data_lock.acquire()
         try:
             message = json.loads(message)
@@ -151,6 +155,11 @@ def driver_thread(driver):
         if not driver.start_collection():
             break
 
+def start_websocket_server():
+    application = tornado.web.Application([(r'/', WSHandler)])
+    http_server = tornado.httpserver.HTTPServer(application)
+    http_server.listen(8000)
+    tornado.ioloop.IOLoop.instance().start()
 
 if __name__ == '__main__':
     '''main'''
@@ -164,10 +173,7 @@ if __name__ == '__main__':
         threading.Thread(target=driver_thread, args=(driver,)).start()
         rover_log = file_storage.RoverLogApp()  # log data.
 
-        application = tornado.web.Application([(r'/', WSHandler)])
-        http_server = tornado.httpserver.HTTPServer(application)
-        http_server.listen(8000)
-        tornado.ioloop.IOLoop.instance().start()
+        start_websocket_server()
     except KeyboardInterrupt:  # response for KeyboardInterrupt such as Ctrl+C
         os.remove("tempLogFiles.json")
         print('User stop this program by KeyboardInterrupt! File:[{0}], Line:[{1}]'.format(__file__, sys._getframe().f_lineno))

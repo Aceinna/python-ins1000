@@ -22,7 +22,7 @@ class Msg_060C_topic_0A(object):
         self.max_unaided_time = 0
         self.max_output_rate = 0
         self.imu_rotation_matrix = []
-        self.output_position_offset = []
+        self.output_position_offset = [] # Output position offset is from imu center by default.
         self.smooth_mode = 0
         self.GNSS_lever_arm_center = [] #shape: [antenna_num][3]
         self.GNSS_lever_arm_housing_mark = [] #shape: [antenna_num][3]
@@ -41,7 +41,7 @@ class Msg_060C_topic_0A(object):
         self.DMI_exists = 0
         # get from self.flags
         self.flags_init_heading_from_GNSS_vel = True
-        self.flags_leverarm_from_imu_center
+        self.flags_leverarm_from_imu_center = True
         # used to packet the '8.4 User Configuration Setup' message.
         self.msg_060D_cmd = ''
 
@@ -158,7 +158,8 @@ class Msg_060C_topic_0A(object):
 
     def pack_msg_060D(self):
         '''
-        pack 060D message. ref 8.4. User Configuration Setup.
+        pack 060D message. ref 8.4. User Configuration Setup. 
+        This message is used to sent to INS-1000 Rover to setup User Configuration.
         '''
         MASK_ANTENNA_NUM = 3
         MASK_EXTENDED_VERSION_FLAG = 8
@@ -241,8 +242,65 @@ class Msg_060C_topic_0A(object):
         self.msg_060D_cmd.append(result[0]) 
         pass
 
+    def pack_user_configuration_json_msg(self):
+        '''
+        pack User Configuration message to Json format.
+        This Json message is used to sent to web client.
+        '''
+        data = collections.OrderedDict()
+        info = collections.OrderedDict()
+        data['Antenna number'] = self.antenna_num
+        data['DMI exists'] = self.DMI_exists
+        data['Initialize heading from GNSS velocity'] = int(self.flags_init_heading_from_GNSS_vel)
+        data['Minimum GNSS velocity'] = self.min_vel
+        data['Maximum unaided time'] = self.max_unaided_time
+        data['Maximum Nav Output Rate'] = int(self.max_output_rate * self.SCALING_MAX_OUTPUT_RATE)
+        data['IMU Rotation Matrix'] = self.imu_rotation_matrix.copy()
+        data['Output position offset'] = list(p*self.SCALING_OUTPUT_POSITION_OFFSET for p in self.output_position_offset)
+
+        lever_arms = []
+        if len(self.GNSS_lever_arm_center) > 0:
+            info['LeverArm WRT'] = 'IMU Center'
+            lever_arms_center = []
+            for i in range(self.antenna_num):
+                lever_arm = collections.OrderedDict()
+                lever_arm['Antenna_ID'] = i
+                lever_arm['LeverArm_X'] = round(self.GNSS_lever_arm_center[i][0]*self.SCALING_LEVER_ARM, 4)
+                lever_arm['LeverArm_Y'] = round(self.GNSS_lever_arm_center[i][1]*self.SCALING_LEVER_ARM, 4)
+                lever_arm['LeverArm_Z'] = round(self.GNSS_lever_arm_center[i][2]*self.SCALING_LEVER_ARM, 4)
+                lever_arms_center.append(lever_arm)
+            info['LeverArm'] = lever_arms_center
+            lever_arms.append(info.copy())
+
+        info.clear()
+        if len(self.GNSS_lever_arm_housing_mark) > 0:
+            info['LeverArm WRT'] = 'Housing Mark'
+            lever_arms_housing_mark = []
+            for i in range(self.antenna_num):
+                lever_arm = collections.OrderedDict()
+                lever_arm['Antenna_ID'] = i
+                lever_arm['LeverArm_X'] = round(self.GNSS_lever_arm_housing_mark[i][0]*self.SCALING_LEVER_ARM, 4)
+                lever_arm['LeverArm_Y'] = round(self.GNSS_lever_arm_housing_mark[i][1]*self.SCALING_LEVER_ARM, 4)
+                lever_arm['LeverArm_Z'] = round(self.GNSS_lever_arm_housing_mark[i][2]*self.SCALING_LEVER_ARM, 4)
+                lever_arms_housing_mark.append(lever_arm)
+            info['LeverArm'] = lever_arms_housing_mark
+            lever_arms.append(info.copy())
+
+        info.clear()
+        data['GNSS Antenna Lever Arm'] = lever_arms
+
+        if self.DMI_exists != 0:
+            info.clear()
+            info['DMI ID'] = self.DMI_id
+            info['DMI scale factor'] = self.DMI_scale_factor
+            info['DMI lever-arm']['LeverArm_X'] = round(self.DMI_lever_arm[0]*self.SCALING_DMI_LEVER_ARM, 4)
+            info['DMI lever-arm']['LeverArm_Y'] = round(self.DMI_lever_arm[1]*self.SCALING_DMI_LEVER_ARM, 4)
+            info['DMI lever-arm']['LeverArm_Z'] = round(self.DMI_lever_arm[2]*self.SCALING_DMI_LEVER_ARM, 4)
+            data['DMI configuration'] = info
+        return data
+
     def get_max_output_rate(self):
-        return self.max_output_rate * self.SCALING_MAX_OUTPUT_RATE
+        return int(self.max_output_rate * self.SCALING_MAX_OUTPUT_RATE)
 
     def set_max_output_rate(self, max_output_rate):
         self.max_output_rate = int(max_output_rate / self.SCALING_MAX_OUTPUT_RATE)
