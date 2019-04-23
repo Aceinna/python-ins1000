@@ -445,61 +445,13 @@ class RoverDriver:
                     msg_060C_topic_0A.update_GNSS_lever_arm_by_internal_lever_arm(internal_lever_arm)
             self.msgs['Msg_060C_topic_0A'] = msg_060C_topic_0A
             # pack GNSS lever-arm json message.
-            '''
-            imu_rotation_matrix = msg_060C_topic_0A.get_imu_rotation_matrix()
-            lever_arm_center = msg_060C_topic_0A.get_GNSS_lever_arm_center()
-            lever_arm_housing_mark = msg_060C_topic_0A.get_GNSS_lever_arm_housing_mark()
 
-            data = []
-            info = collections.OrderedDict()
-            info['Antenna_num'] = msg_060C_topic_0A.antenna_num
-            data.append(info.copy()) 
-            info.clear()
-            if len(lever_arm_center) > 0:
-                info['LeverArm WRT'] = 'IMU Center'
-                lever_arms = []
-                for i in range(msg_060C_topic_0A.antenna_num):
-                    lever_arm = collections.OrderedDict()
-                    lever_arm['Antenna_ID'] = i
-                    lever_arm['LeverArm_X'] = lever_arm_center[i][0]
-                    lever_arm['LeverArm_Y'] = lever_arm_center[i][1]
-                    lever_arm['LeverArm_Z'] = lever_arm_center[i][2]
-                    lever_arms.append(lever_arm)
-                info['LeverArm'] = lever_arms
-                data.append(info.copy())
-
-            info.clear()
-            if len(lever_arm_housing_mark) > 0:
-                info['LeverArm WRT'] = 'Housing Mark'
-                lever_arms = []
-                for i in range(msg_060C_topic_0A.antenna_num):
-                    lever_arm = collections.OrderedDict()
-                    lever_arm['Antenna_ID'] = i
-                    lever_arm['LeverArm_X'] = lever_arm_housing_mark[i][0]
-                    lever_arm['LeverArm_Y'] = lever_arm_housing_mark[i][1]
-                    lever_arm['LeverArm_Z'] = lever_arm_housing_mark[i][2]
-                    lever_arms.append(lever_arm)
-                info['LeverArm'] = lever_arms
-                data.append(info.copy())
-            # print (json.dumps(data))
-            # print("***************")
-            # json_msg = json.dumps({ 'messageType' : 'event',  'data' : {'packetType' : 'IMURotationMatrix', 'packet' : imu_rotation_matrix }})
-            if self.app:
-                self.app.on_message("IMURotationMatrix", imu_rotation_matrix, False)
-                self.app.on_message("GNSSAntennaLeverArm", data, True)
-            self.web_clients_lock.acquire()
-            for client in self.web_clients:
-                client.on_driver_message("IMURotationMatrix", imu_rotation_matrix, False)
-                client.on_driver_message("GNSSAntennaLeverArm", data, True)
-            self.web_clients_lock.release()
-            ### msg_060C_topic_0A.pack_msg_060D()
-            '''
             user_configuration_json_msg = msg_060C_topic_0A.pack_user_configuration_json_msg()
             if self.app:
-                self.app.on_message("UserConfiguration", user_configuration_json_msg, True)
+                self.app.on_message("userConfiguration", user_configuration_json_msg, True)
             self.web_clients_lock.acquire()
             for client in self.web_clients:
-                client.on_driver_message("UserConfiguration", user_configuration_json_msg, True)
+                client.on_driver_message("userConfiguration", user_configuration_json_msg, True)
             self.web_clients_lock.release()
 
         elif sub_id == 0X0C and topic_tp == 0X04: # handle 'Internal Lever-arm' message.
@@ -521,13 +473,13 @@ class RoverDriver:
             len_fmt = '{0}B'.format(payload_len)
             b = struct.pack(len_fmt, *payload)
             data = collections.OrderedDict()
-            data['Firmware Version'] = b.decode() # bytes to string
+            data['firmwareVersion'] = b.decode() # bytes to string
             if self.app:
-                self.app.on_message( "FirmwareVersion", data, False)
+                self.app.on_message( "firmwareVersion", data, False)
 
             self.web_clients_lock.acquire()
             for client in self.web_clients:
-                client.on_driver_message( "FirmwareVersion", data, False)
+                client.on_driver_message( "firmwareVersion", data, False)
             self.web_clients_lock.release()
         elif sub_id == 0X06: # System Response
             msg_type_request = payload[6]
@@ -542,7 +494,7 @@ class RoverDriver:
                     status = 1
                 self.web_clients_lock.acquire()
                 for client in self.web_clients:
-                    client.on_driver_message('UserConfiguration', {"returnStatus": status}, False)
+                    client.on_driver_message('userConfiguration', {"returnStatus": status}, False)
                 self.web_clients_lock.release()
             #Internal Lever-arm Query
             elif msg_type_request == 0X06 and msg_sub_id_request == 0X0B and topic_tp == 0X04: 
@@ -808,25 +760,16 @@ class RoverDriver:
             nav['Longitude'] = self.msgs[TP_CNM]['Longitude']
             nav['Ellipsoidal height'] = self.msgs[TP_CNM]['Ellipsoidal height']
             nav['MSL height'] = self.msgs[TP_CNM]['Ellipsoidal height'] - self.msgs[TP_GH]['Geoid height']
-            nav['Position RMS-N'] = pos_rms_n
-            nav['Position RMS-E'] = pos_rms_e
-            nav['Position RMS-D'] = pos_rms_d
             nav['Position RMS'] = math.sqrt(math.pow(pos_rms_n,2)+math.pow(pos_rms_e,2)+math.pow(pos_rms_d,2))
             nav['Velocity mode'] = self.nav_pos_vel_mode[self.msgs[TP_KFN]['Velocity mode']]
             nav['Vel N'] = self.msgs[TP_CNM]['Vel N']
             nav['Vel E'] = self.msgs[TP_CNM]['Vel E']
             nav['Vel D'] = self.msgs[TP_CNM]['Vel D']
-            nav['Velocity RMS-N'] = vel_rms_n
-            nav['Velocity RMS-E'] = vel_rms_e
-            nav['Velocity RMS-D'] = vel_rms_d
             nav['Velocity RMS'] = math.sqrt(math.pow(vel_rms_n,2)+math.pow(vel_rms_e,2)+math.pow(vel_rms_d,2))
             nav['Attitude status'] = self.nav_att_mode[self.msgs[TP_KFN]['Attitude status']]
             nav['Roll'] = euler_angle[0]*r2d
             nav['Pitch'] = euler_angle[1]*r2d
             nav['Heading'] = euler_angle[2]*r2d
-            nav['Attitude RMS-N'] = att_rms_n
-            nav['Attitude RMS-E'] = att_rms_e
-            nav['Attitude RMS-D'] = att_rms_d
             nav['Attitude RMS'] = math.sqrt(math.pow(att_rms_n,2)+math.pow(att_rms_e,2)+math.pow(att_rms_d,2))
 
             if self.app:
@@ -880,9 +823,9 @@ class RoverDriver:
         CMD_TP_EVENT = 'event'
         CMD_TP_QUERY = 'query'
         CMD_TP_SET = 'set'
-        CMD_PRODUCT_ID = 'ProductID'
-        CMD_ENGINE_VERSION = 'EngineVersion'
-        CMD_FIRMWARE_VERSION = 'FirmwareVersion'
+        CMD_PRODUCT_ID = 'productID'
+        CMD_ENGINE_VERSION = 'engineVersion'
+        CMD_FIRMWARE_VERSION = 'firmwareVersion'
         CMD_IMU_ROTATION_MATRIX = 'IMURotationMatrix'
         CMD_GNSS_ANTENNA_LEVER_ARM = 'GNSSAntennaLeverArm'
         CMD_USER_CONFIGURAION = 'UserConfiguration'
@@ -963,13 +906,3 @@ if __name__ == '__main__':
     # driver.handle_cmd_msg(message)
 
     pass
-
-'''
-todo:
-1. driver 不需要在上报imu矩阵和lever-arm，改为上报整个user configuration包。
-    1.1 message.py中增加对user configuration Json包的打包。
-2. 增加对web下发 query user configuration 命令的响应。  done
-3. SEND NACK 当设置IMU 矩阵和lever-arm失败后。=> 不用发送了，因为user configuration可以发送ack和nack
-3. driver在和rover连接上后，再启server，最好是拿到userconfiguraion和internal lever-arm后再启动server。
-
-'''

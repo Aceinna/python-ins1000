@@ -44,7 +44,7 @@ class WSHandler(tornado.websocket.WebSocketHandler):
         data_lock.acquire()
         for p in self.all_packets:
             for i, (k, v) in enumerate(p.items()):
-                if k == 'UserConfiguration':
+                if k == 'userConfiguration':
                     json_msg = json.dumps({ 'messageType' : 'ack',  'data' : {'packetType' : k, 'packet' : v }})
                 else:
                     json_msg = json.dumps({ 'messageType' : 'event',  'data' : {'packetType' : k, 'packet' : v }})

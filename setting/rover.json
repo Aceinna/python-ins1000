@@ -171,7 +171,7 @@
         "name": "GSVM",
         "header": "AF20050A",
         "description": "Repackaged GSV Message.",
-        "save2file": 1,
+        "save2file": 0,
         "send2web": 1,
         "var_num": {
           "comment": "type: var_num's type, idx: index of var_num in payload(bytearray), field_idx: begining idex of var filed in payload(json)",
@@ -545,21 +545,6 @@
           },
           {
             "type": "float",
-            "name": "Position RMS-N",
-            "unit": "m"
-          },
-          {
-            "type": "float",
-            "name": "Position RMS-E",
-            "unit": "m"
-          },
-          {
-            "type": "float",
-            "name": "Position RMS-D",
-            "unit": "m"
-          },
-          {
-            "type": "float",
             "name": "Position RMS",
             "unit": "m"
           },
@@ -585,21 +570,6 @@
           },
           {
             "type": "float",
-            "name": "Velocity RMS-N",
-            "unit": "m/s"
-          },
-          {
-            "type": "float",
-            "name": "Velocity RMS-E",
-            "unit": "m/s"
-          },
-          {
-            "type": "float",
-            "name": "Velocity RMS-D",
-            "unit": "m/s"
-          },
-          {
-            "type": "float",
             "name": "Velocity RMS",
             "unit": "m/s"
           },
@@ -621,21 +591,6 @@
           {
             "type": "double",
             "name": "Heading",
-            "unit": "deg"
-          },
-          {
-            "type": "float",
-            "name": "Attitude RMS-N",
-            "unit": "deg"
-          },
-          {
-            "type": "float",
-            "name": "Attitude RMS-E",
-            "unit": "deg"
-          },
-          {
-            "type": "float",
-            "name": "Attitude RMS-D",
             "unit": "deg"
           },
           {
@@ -667,7 +622,7 @@
         "send2web": 1
       },
       {
-        "name": "UserConfiguration",
+        "name": "userConfiguration",
         "header": "NONE",
         "description": "System response for User Configuration",
         "save2file": 0,

@@ -172,7 +172,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
                 # double
                 str += '{0:15.12f},'.format(v)
             elif outputPcktType == 'float':
-                str += '{0:12.8f},'.format(v)
+                str += '{0:12.4f},'.format(v) # 12.8
             elif outputPcktType == 'uint8':
                 # byte
                 str += '{0:d},'.format(v)
@@ -257,7 +257,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
                         # double
                         const_str += '{0:15.12f},'.format(v)
                     elif outputPcktType == 'float':
-                        const_str += '{0:12.8f},'.format(v)
+                        const_str += '{0:12.4f},'.format(v) # 12.8
                     elif outputPcktType == 'uint8':
                         # byte
                         const_str += '{0:d},'.format(v)
@@ -279,8 +279,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
                         # double
                         var_str += '{0:15.12f},'.format(v)
                     elif outputPcktType == 'float':
-                        # print(3) #key + str(2))
-                        var_str += '{0:12.8f},'.format(v)
+                        var_str += '{0:12.4f},'.format(v) # 12.8
                     elif outputPcktType == 'uint8':
                         # byte
                         var_str += '{0:d},'.format(v)
@@ -347,23 +346,6 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
         if self.db_user_access_token == '':
             self.db_user_access_token = 'dNKBMAJitNN1oQEFezCxXKJevj5Vgo8EQhoUJY9kB2xxZkkVHrefBabI7S5BAnJj' # for debug.
 
-        '''
-            Path: http://{host address}:3000/api/recordLogs/post
-            Params:
-            {
-                “type”:”INS”      // ‘INS’ or ‘IMU’,
-                “model”:”INS1000”      
-                “fileName”:””      // the name of ins 1000 generated
-                “url”:””       // the path that used on azure,
-                “userId”:””      // the log file owner, will be passed by web
-                “logInfo”:{
-                    “pn”:””,      // product ID
-                    “sn”:””,      // serial number of ins 1000,
-                    “packetType”:”NAV”,  // currently, we only parse NAV packet type
-                    “insProperties":""    // ins 1000 configuration
-                }
-            }
-        '''
         data = {"type": 'INS', "model": 'INS1000', "fileName": file_name, "url": file_name, "userId": '319', 
                 "logInfo": { "pn": '11', "sn": '', "packetType":packet_type,"insProperties":json.dumps(self.rover_properties)}}
 
@@ -373,23 +355,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
         response = requests.post(url, data=data_json, headers=headers)
         response = response.json()
 
-    # def savetoAnsPlatform(self):
-    #     for files in self.log_file_names:
-    #         fileDisplayName = files + "-" + self.userFilename + ".csv"
-
-    #         data = {"pn": '1.0.0', "sn": 'rtk', "fileName": fileDisplayName, "url": self.log_file_names[files],
-    #                 "imuProperties": json.dumps(self.rover_properties),
-    #                 "sampleRate": '100', "packetType": files, "userId": self.userId}
-
-    #         url = "https://api.aceinna.com/api/datafiles/replaceOrCreate"
-    #         data_json = json.dumps(data)
-    #         headers = {'Content-type': 'application/json', 'Authorization': self.db_user_access_token}
-    #         response = requests.post(url, data=data_json, headers=headers)
-    #         response = response.json()
-
     def close(self):
-        # for files in self.log_file_names:
-        #     self.uploadtoAzure(self.log_file_names[files])
         pass
 
     def test_azure(self):
@@ -413,9 +379,5 @@ def main():
             break
 
 if __name__ == '__main__':
-    # main()
-    # rover_log = RoverLogApp()
-    # rover_log.user_log_file_names['NAV'] = 'userid_NAV-20190420_223317.csv'
-    # rover_log.user_log_file_names['GSVM'] = 'userid_GSVM-20190420_223317.csv'
-    # rover_log.test_azure()
-    pass
+    main()
+    
