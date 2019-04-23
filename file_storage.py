@@ -17,12 +17,6 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
     def __init__(self, user=False):
         '''Initialize and create a CSV file
         '''
-        if user and list(user.keys())[0] == 'startLog':
-            self.username = user['startLog']['username']
-            self.userId = user['startLog']['id']
-            self.userFilename = user['startLog']['fileName']
-            self.userAccessToken = user['startLog']['access_token']
-
         start_time = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         self.rover_properties = utility.load_configuration(os.path.join('setting', 'rover.json'))
         if not self.rover_properties:
@@ -39,6 +33,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
         self.user_log_files = {}
         # azure app.
         self.user_id = ''
+        self.file_name = ''
         self.blob_user_access_token = '' # Reserved.
         self.db_user_access_token = ''
         self.host_address = self.rover_properties['userConfiguration']['hostAddress']
@@ -82,8 +77,9 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
     def on_exit(self):
         pass
 
-    def start_user_log(self, user_id):
+    def start_user_log(self, user_id, file_name):
         self.user_id = user_id
+        self.file_name = file_name
         try:
             if len(self.user_log_file_rows) > 0:
                 return 1
@@ -94,7 +90,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
             for packet in self.output_packets:
                 if packet['name'] in self.msgs_need_to_log:
                     self.user_log_file_rows[packet['name']] = 0
-                    self.user_log_file_names[packet['name']] = self.user_id + '_' + packet['name'] +'-' + start_time + '.csv'
+                    self.user_log_file_names[packet['name']] = self.file_name + '_' + packet['name'] +'-' + start_time + '.csv'
                     self.user_log_files[packet['name']] = open('data/' + self.user_log_file_names[packet['name']], 'w')
             return 0
         except Exception as e:

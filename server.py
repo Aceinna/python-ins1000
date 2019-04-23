@@ -68,13 +68,13 @@ class WSHandler(tornado.websocket.WebSocketHandler):
         data_lock.acquire()
         try:
             message = json.loads(message)
-            if message['messageType'] == 'event' and message['data']['packetType'] == 'StartLog':
-                rev = rover_log.start_user_log(message['data']['UserID'])
-                json_msg = json.dumps({"messageType":"ack","data":{"packetType":"StartLog","packet":{"ReturnStatus":rev}}})
+            if message['messageType'] == 'event' and message['data']['packetType'] == 'startLog':
+                rev = rover_log.start_user_log(message['data']['packet']['userID'],message['data']['packet']['fileName'])
+                json_msg = json.dumps({"messageType":"ack","data":{"packetType":"startLog","packet":{"returnStatus":rev}}})
                 self.write_message(json_msg)
-            elif message['messageType'] == 'event' and message['data']['packetType'] == 'StopLog':
-                rev = rover_log.stop_user_log(message['data']['packet']['User Access Token'])
-                json_msg = json.dumps({"messageType":"ack","data":{"packetType":"StopLog","packet":{"ReturnStatus":rev}}})
+            elif message['messageType'] == 'event' and message['data']['packetType'] == 'stopLog':
+                rev = rover_log.stop_user_log(message['data']['packet']['userAccessToken'])
+                json_msg = json.dumps({"messageType":"ack","data":{"packetType":"stopLog","packet":{"returnStatus":rev}}})
                 self.write_message(json_msg)
             else:
                 driver.handle_cmd_msg(message)

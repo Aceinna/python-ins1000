@@ -542,8 +542,8 @@ class RoverDriver:
                     status = 1
                 self.web_clients_lock.acquire()
                 for client in self.web_clients:
-                    client.on_driver_message('UserConfiguration', {"ReturnStatus": status}, False)
-                self.web_clients_lock.release()                     
+                    client.on_driver_message('UserConfiguration', {"returnStatus": status}, False)
+                self.web_clients_lock.release()
             #Internal Lever-arm Query
             elif msg_type_request == 0X06 and msg_sub_id_request == 0X0B and topic_tp == 0X04: 
                 if response == 1: #ACK
