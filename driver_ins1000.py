@@ -501,7 +501,6 @@ class RoverDriver:
             for client in self.web_clients:
                 client.on_driver_message("UserConfiguration", user_configuration_json_msg, True)
             self.web_clients_lock.release()
-            
 
         elif sub_id == 0X0C and topic_tp == 0X04: # handle 'Internal Lever-arm' message.
             validity = payload[1] # Validity 0: Invalid, 1: Valid

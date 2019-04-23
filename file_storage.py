@@ -37,41 +37,20 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
         self.user_log_file_rows = {}
         self.user_log_file_names = {}
         self.user_log_files = {}
+        # azure app.
+        self.user_id = ''
+        self.blob_user_access_token = '' # Reserved.
+        self.db_user_access_token = ''
+        self.host_address = self.rover_properties['userConfiguration']['hostAddress']
 
-        if user:
-            with open('tempLogFiles.json', 'r') as outfile:
-                data = json.load(outfile)
-                self.log_file_names = data
-
-        if not user:
-            with open('tempLogFiles.json', 'w') as outfile:
-                json.dump({}, outfile)
-            try:
-                for packet in self.output_packets:
-                    if 1 == packet['save2file']:
-                        self.msgs_need_to_log.append(packet['name'])
-                    else:
-                        continue
-                    self.log_file_rows[packet['name']] = 0
-                    self.log_file_names[packet['name']] = packet['name'] +'-' + start_time + '.csv'
-                    self.log_files[packet['name']] = open('data/' + self.log_file_names[packet['name']], 'w')
-
-                    entry = {packet['name']:self.log_file_names[packet['name']]}
-                    with open('tempLogFiles.json') as f:
-                        data = json.load(f)
-                    data.update(entry)
-                    with open('tempLogFiles.json','w') as f:
-                        json.dump(data, f)
-            except:
-                pass
-
-        if user and list(user.keys())[0] == 'startLog':
-            self.savetoAnsPlatform()
-
-        if user and list(user.keys())[0] == 'stopLog':
-            time.sleep(10)
-            self.close()
-                # os.remove("tempLogFiles.json")
+        for packet in self.output_packets:
+            if 1 == packet['save2file']:
+                self.msgs_need_to_log.append(packet['name'])
+            else:
+                continue
+            self.log_file_rows[packet['name']] = 0
+            self.log_file_names[packet['name']] = packet['name'] +'-' + start_time + '.csv'
+            self.log_files[packet['name']] = open('data/' + self.log_file_names[packet['name']], 'w')
 
     def on_reinit(self):
         print ("RoverLogApp.on_reinit()")
@@ -104,30 +83,25 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
         pass
 
     def start_user_log(self, user_id):
+        self.user_id = user_id
         try:
             if len(self.user_log_file_rows) > 0:
                 return 1
 
-            if not isinstance(user_id, str):
-                user_id = str(user_id)
+            if not isinstance(self.user_id, str):
+                self.user_id = str(self.user_id)
             start_time = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
             for packet in self.output_packets:
                 if packet['name'] in self.msgs_need_to_log:
                     self.user_log_file_rows[packet['name']] = 0
-                    self.user_log_file_names[packet['name']] = user_id + '_' + packet['name'] +'-' + start_time + '.csv'
+                    self.user_log_file_names[packet['name']] = self.user_id + '_' + packet['name'] +'-' + start_time + '.csv'
                     self.user_log_files[packet['name']] = open('data/' + self.user_log_file_names[packet['name']], 'w')
             return 0
         except Exception as e:
             print(e)
             return 2
 
-    def upload_to_azure_task(self, log_files):
-        for i, (k, v) in enumerate(log_files.items()): # k: packet type; v: log file name
-            self.uploadtoAzure(v)
-
-        pass
-
-    def stop_user_log(self):
+    def stop_user_log(self, db_user_access_token):
         try:
             if len(self.user_log_file_rows) == 0:
                 return 1 # driver hasn't started logging files yet.
@@ -136,6 +110,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
                 v.close()
 
             # start a thread to upload logs to cloud here if necessary.
+            self.db_user_access_token = db_user_access_token
             threading.Thread(target=self.upload_to_azure_task(self.user_log_file_names.copy())).start()
 
             self.user_log_file_rows.clear()
@@ -145,6 +120,10 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
         except Exception as e:
             print(e)
             return 2
+
+    def upload_to_azure_task(self, log_files_dict):
+        for i, (k, v) in enumerate(log_files_dict.items()): # k: packet type; v: log file name
+            self.uploadtoAzure(k, v)
 
     def log(self, data, packet_type):
         ''' Parse the data, read in from the unit, and generate a data file using
@@ -340,22 +319,22 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
 
     ''' Upload CSV's to Azure container.
     '''
-    def uploadtoAzure(self,fileDisplayName):
-
-        # f = open("data/" + self.user['fileName'], "r")
-        f = open("data/" + fileDisplayName, "r")
+    def uploadtoAzure(self, packet_type, file_name):
+        f = open("data/" + file_name, "r")
         text = f.read()
         account_key = '+roYuNmQbtLvq2Tn227ELmb6s1hzavh0qVQwhLORkUpM0DN7gxFc4j+DF/rEla1EsTN2goHEA1J92moOM/lfxg=='
 
         try:
-            self.azureStorage('navview',account_key,'data', fileDisplayName, text)
+            # self.azureStorage('navview',account_key,'data', file_name, text)
+            self.azureStorage('navview',account_key,'data-1000', file_name, text)
         except:
             # Try again!
-            self.azureStorage('navview', account_key, 'data', fileDisplayName, text)
+            # self.azureStorage('navview', account_key, 'data', file_name, text)
+            self.azureStorage('navview', account_key, 'data-1000', file_name, text)
 
         ''' Trigger Database upload
         '''
-        # self.savetoAnsPlatform()
+        self.savetoAnsPlatform(packet_type, file_name)
 
     def azureStorage(self, accountName, accountkey, countainerName,fileName,text):
         self.append_blob_service = AppendBlobService(account_name=accountName,
@@ -368,40 +347,57 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
 
     ''' Upload CSV related information to the database.
     '''
-    def savetoAnsPlatform(self):
-        for files in self.log_file_names:
-            fileDisplayName = files + "-" + self.userFilename + ".csv"
+    def savetoAnsPlatform(self, packet_type, file_name):
+        if self.db_user_access_token == '':
+            self.db_user_access_token = 'dNKBMAJitNN1oQEFezCxXKJevj5Vgo8EQhoUJY9kB2xxZkkVHrefBabI7S5BAnJj' # for debug.
 
-            data = {"pn": '1.0.0', "sn": 'rtk', "fileName": fileDisplayName, "url": self.log_file_names[files],
-                    "imuProperties": json.dumps(self.rover_properties),
-                    "sampleRate": '100', "packetType": files, "userId": self.userId}
+        '''
+            Path: http://{host address}:3000/api/recordLogs/post
+            Params:
+            {
+                “type”:”INS”      // ‘INS’ or ‘IMU’,
+                “model”:”INS1000”      
+                “fileName”:””      // the name of ins 1000 generated
+                “url”:””       // the path that used on azure,
+                “userId”:””      // the log file owner, will be passed by web
+                “logInfo”:{
+                    “pn”:””,      // product ID
+                    “sn”:””,      // serial number of ins 1000,
+                    “packetType”:”NAV”,  // currently, we only parse NAV packet type
+                    “insProperties":""    // ins 1000 configuration
+                }
+            }
+        '''
+        data = {"type": 'INS', "model": 'INS1000', "fileName": file_name, "url": file_name, "userId": '319', 
+                "logInfo": { "pn": '11', "sn": '', "packetType":packet_type,"insProperties":json.dumps(self.rover_properties)}}
 
-            url = "https://api.aceinna.com/api/datafiles/replaceOrCreate"
-            data_json = json.dumps(data)
-            headers = {'Content-type': 'application/json', 'Authorization': self.userAccessToken}
-            response = requests.post(url, data=data_json, headers=headers)
-            response = response.json()
+        url = "http://" + self.host_address + ":3000/api/recordLogs/post"
+        data_json = json.dumps(data)
+        headers = {'Content-type': 'application/json', 'Authorization': self.db_user_access_token}
+        response = requests.post(url, data=data_json, headers=headers)
+        response = response.json()
 
+    # def savetoAnsPlatform(self):
+    #     for files in self.log_file_names:
+    #         fileDisplayName = files + "-" + self.userFilename + ".csv"
 
+    #         data = {"pn": '1.0.0', "sn": 'rtk', "fileName": fileDisplayName, "url": self.log_file_names[files],
+    #                 "imuProperties": json.dumps(self.rover_properties),
+    #                 "sampleRate": '100', "packetType": files, "userId": self.userId}
 
-    # def close(self,fileName,storedFile):
-    #     time.sleep(0.1)
-    #     # if self.ws:
-    #     storedFile.close()
-    #     threading.Thread(target=self.uploadtoAzure(fileName)).start()
-    #     # else:
-    #     #     self.file.close()
-    #     # print('close')
-    #     # try:
-    #     #     for packet in self.output_packets:
-    #     #         self.log_files[packet['name']].close()
-    #     #         threading.Thread(target=self.write_to_azurelog_files[packet['name']]).start()
-    #     # except:
-    #     #     pass
+    #         url = "https://api.aceinna.com/api/datafiles/replaceOrCreate"
+    #         data_json = json.dumps(data)
+    #         headers = {'Content-type': 'application/json', 'Authorization': self.db_user_access_token}
+    #         response = requests.post(url, data=data_json, headers=headers)
+    #         response = response.json()
 
     def close(self):
-        for files in self.log_file_names:
-            self.uploadtoAzure(self.log_file_names[files])
+        # for files in self.log_file_names:
+        #     self.uploadtoAzure(self.log_file_names[files])
+        pass
+
+    def test_azure(self):
+        threading.Thread(target=self.upload_to_azure_task(self.user_log_file_names.copy())).start()
 
 
 def main():
@@ -421,4 +417,9 @@ def main():
             break
 
 if __name__ == '__main__':
-    main()
+    # main()
+    # rover_log = RoverLogApp()
+    # rover_log.user_log_file_names['NAV'] = 'userid_NAV-20190420_223317.csv'
+    # rover_log.user_log_file_names['GSVM'] = 'userid_GSVM-20190420_223317.csv'
+    # rover_log.test_azure()
+    pass

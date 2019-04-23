@@ -2,7 +2,10 @@
   "name": "Rover",
   "type": "Rover",
   "description": "Rover",
-  "userConfiguration": [],
+  "userConfiguration":
+    {
+      "hostAddress": "10.0.20.56"
+    },
   "userMessages": {
     "inputPackets": [],
     "outputPackets": [
@@ -10,7 +13,7 @@
         "name": "KFN",
         "header": "AF200501",
         "description": "Kalman Filter Navigation Message",
-        "save2file": 1,
+        "save2file": 0,
         "send2web": 0,
         "payload": [
           {
@@ -94,7 +97,7 @@
         "name": "SSS",
         "header": "AF200502",
         "description": "Satellite Signal Strength.",
-        "save2file": 1,
+        "save2file": 0,
         "send2web": 1,
         "var_num": {
           "comment": "type: var_num's type, idx: index of var_num in payload(bytearray), field_idx: begining idex of var filed in payload(json)",
@@ -377,7 +380,7 @@
         "name": "TSM",
         "header": "AF200510",
         "description": "This message contains the time sync message between the system time and GPS time. It gets generated at every PPS event. The GPS time corresponding to the system time can be obtained by 'GPS time = System computer time - Bias'.",
-        "save2file": 1,
+        "save2file": 0,
         "send2web": 0,
         "payload": [
           {

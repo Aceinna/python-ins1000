@@ -61,10 +61,10 @@ class WSHandler(tornado.websocket.WebSocketHandler):
         data_lock.release()
 
     def on_message(self, message):
-        if driver.connection_status == 0:
-            json_msg = json.dumps({ 'messageType' : 'event',  'data' : {'packetType' : 'ConnectionStatus', 'packet' : {'ConnectionStatus' : 0} }})
-            self.write_message(json_msg)
-            return
+        # if driver.connection_status == 0:
+        #     json_msg = json.dumps({ 'messageType' : 'event',  'data' : {'packetType' : 'ConnectionStatus', 'packet' : {'ConnectionStatus' : 0} }})
+        #     self.write_message(json_msg)
+        #     return
         data_lock.acquire()
         try:
             message = json.loads(message)
@@ -73,7 +73,7 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                 json_msg = json.dumps({"messageType":"ack","data":{"packetType":"StartLog","packet":{"ReturnStatus":rev}}})
                 self.write_message(json_msg)
             elif message['messageType'] == 'event' and message['data']['packetType'] == 'StopLog':
-                rev = rover_log.stop_user_log()
+                rev = rover_log.stop_user_log(message['data']['packet']['User Access Token'])
                 json_msg = json.dumps({"messageType":"ack","data":{"packetType":"StopLog","packet":{"ReturnStatus":rev}}})
                 self.write_message(json_msg)
             else:
