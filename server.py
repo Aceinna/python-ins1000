@@ -75,6 +75,8 @@ class WSHandler(tornado.websocket.WebSocketHandler):
             elif message['messageType'] == 'event' and message['data']['packetType'] == 'stopLog':
                 rev = rover_log.stop_user_log(message['data']['packet']['userAccessToken'])
                 json_msg = json.dumps({"messageType":"ack","data":{"packetType":"stopLog","packet":{"returnStatus":rev}}})
+                # print(json_msg)
+                # print('************') 
                 self.write_message(json_msg)
             else:
                 driver.handle_cmd_msg(message)
@@ -175,7 +177,6 @@ if __name__ == '__main__':
 
         start_websocket_server()
     except KeyboardInterrupt:  # response for KeyboardInterrupt such as Ctrl+C
-        os.remove("tempLogFiles.json")
         print('User stop this program by KeyboardInterrupt! File:[{0}], Line:[{1}]'.format(__file__, sys._getframe().f_lineno))
         os._exit(1)
     except Exception as e:

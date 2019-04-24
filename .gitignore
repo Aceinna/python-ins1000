@@ -1,6 +1,7 @@
 # !.gitignore
 __pycache__
 data
+.vscode
 .DS_Store
 *.pyc
 setting/connection.json

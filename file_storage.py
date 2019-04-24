@@ -107,7 +107,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
 
             # start a thread to upload logs to cloud here if necessary.
             self.db_user_access_token = db_user_access_token
-            threading.Thread(target=self.upload_to_azure_task(self.user_log_file_names.copy())).start()
+            threading.Thread(target=self.upload_to_azure_task, args=(self.user_log_file_names.copy(), )).start()
 
             self.user_log_file_rows.clear()
             self.user_log_file_names.clear()

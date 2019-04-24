@@ -504,7 +504,7 @@
             "unit": "s"
           },
           {
-            "type": "double",
+            "type": "float",
             "name": "Time of week",
             "unit": "s"
           },
@@ -512,11 +512,6 @@
             "type": "uint16",
             "name": "GPS week",
             "unit": ""
-          },
-          {
-            "type": "double",
-            "name": "GPS time",
-            "unit": "s"
           },
           {
             "type": "string",
@@ -579,17 +574,17 @@
             "unit": ""
           },
           {
-            "type": "double",
+            "type": "float",
             "name": "Roll",
             "unit": "deg"
           },
           {
-            "type": "double",
+            "type": "float",
             "name": "Pitch",
             "unit": "deg"
           },
           {
-            "type": "double",
+            "type": "float",
             "name": "Heading",
             "unit": "deg"
           },
@@ -625,6 +620,13 @@
         "name": "userConfiguration",
         "header": "NONE",
         "description": "System response for User Configuration",
+        "save2file": 0,
+        "send2web": 1
+      },
+      {
+        "name": "NTRIPConfiguration",
+        "header": "NONE",
+        "description": "System response for NTRIP Client Configuration",
         "save2file": 0,
         "send2web": 1
       }

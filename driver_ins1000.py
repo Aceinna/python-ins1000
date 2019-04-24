@@ -18,7 +18,7 @@ import math
 import json
 import collections
 import serial
-from message import Msg_060C_topic_0A
+from message import Msg_060C_topic_0A, Msg_NTRIP
 if sys.version_info[0] > 2:
     from queue import Queue
 else:
@@ -43,12 +43,13 @@ class RoverDriver:
         self.web_clients = []
         self.msgs = {} 
         self.cmds = {}
-        self.connection_status = 0 # 0: unconnected 1:connected.
         self.cmds['queryProductId'] = b'\xAF\x20\x06\x0B\x01\x00\x01\x01\x01'
         self.cmds['queryEngineVersion'] = b'\xAF\x20\x06\x0B\x01\x00\x02\x02\x02'
         self.cmds['queryFirmwareVersion'] = b'\xAF\x20\x06\x0B\x01\x00\x0C\x0C\x0C'
         self.cmds['queryInternalLeverArm'] = b'\xAF\x20\x06\x0B\x01\x00\x04\x04\x04'
         self.cmds['queryUserConfiguration'] = b'\xAF\x20\x06\x0B\x01\x00\x0A\x0A\x0A'
+        self.cmds['queryNTRIPConfiguration'] = b'\xAF\x20\x06\x0B\x01\x00\x01\x01\x01'
+        self.connection_status = 0 # 0: unconnected 1:connected.
         self.nav_pos_vel_mode = {0:'INVALID', 1:'DEAD_RECKON', 2:'STAND_ALONE', 3:'PRECISE_POINT_POSITIONING', 4:'CODE_DIFF', 5:'RTK_FLOAT', 6:'RTK_FIXED', 7:'USER_AIDING'}
         self.nav_att_mode = {0:'INVALID', 1:'COARSE', 2:'FINE'}
         self.setting_folder = os.path.join(os.getcwd(), r'setting')  # use to store some configuration files.
@@ -362,8 +363,6 @@ class RoverDriver:
         rev = True if (data.find(b'\xAF\x20\x05') > -1 or data.find(b'\xAF\x20\x06') > -1 or data.find(b'\xAF\x20\x07') > -1) else False
         return rev
 
-
-
     def get_packet_type(self):
         return self.packet_type
 
@@ -504,6 +503,14 @@ class RoverDriver:
                     self.query_rover_cfg_setup()
             else:
                 print('Receive system response, msg_type:{0}, msg_sub_id:{1}, topic:{2}'.format(msg_type_request, msg_sub_id_request, topic_tp))
+        elif sub_id == 0X0A and topic_tp == 0X03 and payload_len == 155: # NTIP cfg response.
+            msg_NTRIP = Msg_NTRIP()
+            msg_NTRIP.unpack_NTRIP_msg(frame)
+            data = msg_NTRIP.pack_NTRIP_configuration_json_msg()
+            self.web_clients_lock.acquire()
+            for client in self.web_clients:
+                client.on_driver_message('NTRIPConfiguration', data, False)
+            self.web_clients_lock.release()
         else:
             pass
 
@@ -754,7 +761,6 @@ class RoverDriver:
             nav['System time'] = int(self.msgs[TP_KFN]['System time'])
             nav['Time of week'] = self.msgs[TP_CNM]['Time of week']
             nav['GPS week'] = self.msgs[TP_CNM]['GPS week']
-            nav['GPS time'] = self.msgs[TP_KFN]['GPS time']
             nav['Position mode'] = self.nav_pos_vel_mode[self.msgs[TP_KFN]['Position mode']]
             nav['Latitude'] = self.msgs[TP_CNM]['Latitude']
             nav['Longitude'] = self.msgs[TP_CNM]['Longitude']
@@ -828,7 +834,8 @@ class RoverDriver:
         CMD_FIRMWARE_VERSION = 'firmwareVersion'
         CMD_IMU_ROTATION_MATRIX = 'IMURotationMatrix'
         CMD_GNSS_ANTENNA_LEVER_ARM = 'GNSSAntennaLeverArm'
-        CMD_USER_CONFIGURAION = 'UserConfiguration'
+        CMD_USER_CONFIGURAION = 'userConfiguration'
+        CMD_NTRIP_CONFIGURAION = 'NTRIPConfiguration'
 
         if message['messageType'] == CMD_TP_QUERY:
             if message['data']['packetType'] == CMD_PRODUCT_ID:
@@ -839,6 +846,8 @@ class RoverDriver:
                 self.write(self.cmds['queryFirmwareVersion'])
             elif message['data']['packetType'] == CMD_USER_CONFIGURAION:
                 self.write(self.cmds['queryUserConfiguration'])
+            elif message['data']['packetType'] == CMD_NTRIP_CONFIGURAION:
+                self.write(self.cmds['queryNTRIPConfiguration'])
         elif message['messageType'] == CMD_TP_SET:
             if message['data']['packetType'] == CMD_IMU_ROTATION_MATRIX:
                 matrix = list(message['data']['packet']['C{0}'.format(i)] for i in range(9))
@@ -871,7 +880,13 @@ class RoverDriver:
                 else:
                     self.write(self.cmds['queryUserConfiguration'])
                     # send NACK to web client
-
+            elif message['data']['packetType'] == CMD_NTRIP_CONFIGURAION:
+                packet = message['data']['packet']
+                msg_NTRIP = Msg_NTRIP()
+                msg_NTRIP.pack_msg_NTRIP(packet)
+                self.write(msg_NTRIP.msg_ntrip_cmd)
+        else:
+            pass
         pass
 
     def query_rover_cfg_setup(self):
@@ -881,6 +896,7 @@ class RoverDriver:
         self.write(self.cmds['queryInternalLeverArm'])
         # time.sleep(0.1)
         self.write(self.cmds['queryUserConfiguration'])
+        self.write(self.cmds['queryNTRIPConfiguration'])
 
     def write(self,n):
             try:
@@ -900,8 +916,14 @@ if __name__ == '__main__':
     # frame = bytearray(b'\xAF\x20\x06\x0C\x1A\x00\x04\x01\x17\x48\x50\xFC\x18\x73\x97\xBF\x92\xCB\x7F\x48\xBF\x7D\x6D\x3F\xC3\xD3\x2B\x65\x19\xE2\x98\xBF\x15\x9F')
     # driver.msg_typeid_06_handler(frame)
 
+    # frame = bytearray(b'\xAF\x20\x06\x0A\x9B\x00\x02\x72\x74\x6B\x32\x67\x6F\x2E\x63\x6F\x6D\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x35\x08\x00\x00\x74\x65\x73\x74\x65\x72\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x63\x6F\x6D\x65\x69\x6E\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x77\x75\x78\x69\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x70\xE2')
+    # frame = bytearray(b'\xAF\x20\x06\x0A\x9B\x00\x03\x72\x74\x6B\x2E\x6E\x74\x72\x69\x70\x2E\x71\x78\x77\x7A\x2E\x63\x6F\x6D\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x42\x1F\x00\x00\x71\x78\x65\x6F\x79\x6F\x30\x30\x31\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x36\x36\x62\x65\x65\x64\x38\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x52\x54\x43\x4D\x33\x32\x5F\x47\x47\x42\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xB9\x26')
+    # driver = RoverDriver()
+    # driver.msg_typeid_06_handler(frame)
+
     # message = '''{"messageType":"set","data":{"packetType":"IMURotationMatrix","packet":{"C0":11,"C1":10,"C2":10,"C3":10,"C4":11,"C5":10,"C6":10,"C7":10,"C8":11}}}'''
     # message = '''{"messageType":"set","data":{"packetType":"GNSSAntennaLeverArm","packet":[{"Antenna_num":2,"LeverArm WRT":"IMU Center"},{"Antenna_ID":0,"LeverArm_X":0.4,"LeverArm_Y":0.5,"LeverArm_Z":-0.6},{"Antenna_ID":1,"LeverArm_X":0.1,"LeverArm_Y":0.2,"LeverArm_Z":-0.3}]}}'''
+    # message = '''{"messageType":"set","data":{"packetType":"NTRIPConfiguration","packet":{"Server":"rtk2go.com","Port":2101,"Reference frame":"WGS84","User":"tester","Password":"comein","Mount point":"wuxi"}}}'''
     # message = json.loads(message)
     # driver.handle_cmd_msg(message)
 

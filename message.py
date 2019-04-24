@@ -13,7 +13,6 @@ class Msg_060C_topic_0A(object):
         ''' initialization
         '''
         self.frame = frame
-        self.payload_len = 0
         self.topic = 0
         self.indicators = 0
         self.flags = 0
@@ -159,7 +158,7 @@ class Msg_060C_topic_0A(object):
     def pack_msg_060D(self):
         '''
         pack 060D message. ref 8.4. User Configuration Setup. 
-        This message is used to sent to INS-1000 Rover to setup User Configuration.
+        This message is used to sent to INS1000 Rover to setup User Configuration.
         '''
         MASK_ANTENNA_NUM = 3
         MASK_EXTENDED_VERSION_FLAG = 8
@@ -373,3 +372,130 @@ class Msg_060C_topic_0A(object):
             for an in range(self.antenna_num):
                 self.GNSS_lever_arm_center.append([self.GNSS_lever_arm_housing_mark[an][i] + self.internal_lever_arm[i] for i in range(3) ])
 
+
+class Msg_NTRIP(object):
+    def __init__(self):
+        ''' initialization
+        '''
+        self.frame = ''
+        self.payload_len = 0
+        self.topic = 0
+        self.server = ''
+        self.port = 0
+        self.reference_frame = 0
+        self.user = ''
+        self.password = ''
+        self.mount_point = ''
+        self.msg_ntrip_cmd = ''
+
+    def unpack_NTRIP_msg(self, frame):
+        '''
+        parse NTRIP message.
+        '''
+        self.frame = frame
+        PAYLOAD_LEN_IDX = 4
+        payload_len = 256 * self.frame[PAYLOAD_LEN_IDX + 1] + self.frame[PAYLOAD_LEN_IDX]
+        payload = self.frame[6:payload_len+6]   # extract the payload
+
+        i = 0
+        self.topic = payload[i] # uint8_t
+        i+=1
+
+        len_fmt = '30B' #char[30]
+        b = struct.pack(len_fmt, *(payload[i:i+30]))
+        self.server = b.decode().replace('\x00','') # delete \x00 
+        i+=30
+
+        self.port = payload[i+1]*256+payload[i] # uint16_t
+        i+=2
+
+        self.reference_frame = payload[i+1]*256+payload[i] # uint16_t
+        i+=2
+
+        len_fmt = '20B' #char[20]
+        b = struct.pack(len_fmt, *(payload[i:i+20]))
+        self.user = b.decode().replace('\x00','')
+        i+=20
+
+        len_fmt = '20B' #char[20]
+        b = struct.pack(len_fmt, *(payload[i:i+20]))
+        self.password = b.decode().replace('\x00','')
+        i+=20
+
+        len_fmt = '80B' #char[20]
+        b = struct.pack(len_fmt, *(payload[i:i+80]))
+        self.mount_point = b.decode().replace('\x00','')
+        i+=80
+
+    def pack_msg_NTRIP(self, json_msg):
+        '''
+        pack NTRIP configuration message. ref 8.11. NTRIP configuration. 
+        This message is used to sent to INS1000 Rover to setup NTRIP Configuration.
+        '''
+        PAYLOAD_LEN_IDX = 4
+        FRAME_HEADER = bytearray(b'\xAF\x20\x06\x0A\x9B\x00\x02')
+        self.msg_ntrip_cmd = copy.deepcopy(FRAME_HEADER)
+        print(json_msg)
+        self.server = json_msg['Server']
+        self.port = int(json_msg['Port'])
+        if json_msg['Reference frame'] == 'WGS84':
+            self.reference_frame = 0
+        elif json_msg['Reference frame'] == 'NAD83':
+            self.reference_frame = 1
+        else:
+            self.reference_frame = 0
+        self.user = json_msg['User']
+        self.password = json_msg['Password']
+        self.mount_point = json_msg['Mount point']
+
+        b = bytes(self.server, encoding='utf-8')
+        self.msg_ntrip_cmd += b
+        b = bytes(30-len(b)) 
+        self.msg_ntrip_cmd += b # add \x00
+
+        v = self.port.to_bytes(2, byteorder='little', signed=False) # uint16_t
+        self.msg_ntrip_cmd += v
+
+        v = self.reference_frame.to_bytes(2, byteorder='little', signed=False) # uint16_t
+        self.msg_ntrip_cmd += v
+
+        b = bytes(self.user, encoding='utf-8')
+        self.msg_ntrip_cmd += b
+        b = bytes(20-len(b)) 
+        self.msg_ntrip_cmd += b # add \x00
+
+        b = bytes(self.password, encoding='utf-8')
+        self.msg_ntrip_cmd += b
+        b = bytes(20-len(b)) 
+        self.msg_ntrip_cmd += b # add \x00
+
+        b = bytes(self.mount_point, encoding='utf-8')
+        self.msg_ntrip_cmd += b
+        b = bytes(80-len(b)) 
+        self.msg_ntrip_cmd += b # add \x00
+
+
+        result = utility.check_sum(self.msg_ntrip_cmd[PAYLOAD_LEN_IDX + 2:])
+        self.msg_ntrip_cmd.append(result[1]) 
+        self.msg_ntrip_cmd.append(result[0]) 
+
+    def pack_NTRIP_configuration_json_msg(self):
+        '''
+        pack NTRIP Configuration message to Json format.
+        This Json message is used to sent to web client.
+        '''
+        data = collections.OrderedDict()
+        data['Server'] = self.server
+        data['Port'] = self.port
+        if self.reference_frame == 0:
+            data['Reference frame'] = 'WGS84' 
+        elif self.reference_frame == 1:
+            data['Reference frame'] = 'NAD83' 
+        data['User'] = self.user
+        data['Password'] = self.password
+        data['Mount point'] = self.mount_point
+        return data
+
+
+if __name__ == '__main__':
+    pass
