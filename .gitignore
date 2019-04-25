@@ -4,5 +4,5 @@ data
 .vscode
 .DS_Store
 *.pyc
-setting/connection.json
+# setting/connection.json
 tempLogFiles.json

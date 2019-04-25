@@ -180,4 +180,4 @@ if __name__ == '__main__':
         print('User stop this program by KeyboardInterrupt! File:[{0}], Line:[{1}]'.format(__file__, sys._getframe().f_lineno))
         os._exit(1)
     except Exception as e:
-            print(e)
+        print(e)
