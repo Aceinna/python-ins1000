@@ -238,7 +238,7 @@ class RoverDriver:
             print("Thread[{0}({1})] started.".format(t.name, t.ident))
             self.threads.append(t)
 
-        self.query_rover_cfg_setup()
+        # self.query_rover_cfg_setup()
         self.connection_status = 1
         
         if self.handle_KeyboardInterrupt():
