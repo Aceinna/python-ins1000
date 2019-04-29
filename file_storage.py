@@ -346,7 +346,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
         if self.db_user_access_token == '':
             self.db_user_access_token = 'dNKBMAJitNN1oQEFezCxXKJevj5Vgo8EQhoUJY9kB2xxZkkVHrefBabI7S5BAnJj' # for debug.
 
-        data = {"type": 'INS', "model": 'INS1000', "fileName": file_name, "url": file_name, "userId": '319', 
+        data = {"type": 'INS', "model": 'INS1000', "fileName": file_name, "url": file_name, "userId": self.user_id, 
                 "logInfo": { "pn": '11', "sn": '', "packetType":packet_type,"insProperties":json.dumps(self.rover_properties)}}
 
         url = "http://" + self.host_address + ":3000/api/recordLogs/post"
