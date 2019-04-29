@@ -41,15 +41,15 @@ class RoverDriver:
         self.web_clients_lock = threading.Lock()  # lock of data_queue
         self.app = None
         self.web_clients = []
-        self.msgs = {} 
+        self.msgs = {}
         self.cmds = {}
+        self.connection_status = 0 # 0: unconnected 1:connected.
         self.cmds['queryProductId'] = b'\xAF\x20\x06\x0B\x01\x00\x01\x01\x01'
         self.cmds['queryEngineVersion'] = b'\xAF\x20\x06\x0B\x01\x00\x02\x02\x02'
         self.cmds['queryFirmwareVersion'] = b'\xAF\x20\x06\x0B\x01\x00\x0C\x0C\x0C'
         self.cmds['queryInternalLeverArm'] = b'\xAF\x20\x06\x0B\x01\x00\x04\x04\x04'
         self.cmds['queryUserConfiguration'] = b'\xAF\x20\x06\x0B\x01\x00\x0A\x0A\x0A'
-        self.cmds['queryNTRIPConfiguration'] = b'\xAF\x20\x06\x0B\x01\x00\x01\x01\x01'
-        self.connection_status = 0 # 0: unconnected 1:connected.
+        self.cmds['queryNTRIPConfiguration'] = b'\xAF\x20\x06\x0A\x01\x00\x01\x01\x01'
         self.nav_pos_vel_mode = {0:'INVALID', 1:'DEAD_RECKON', 2:'STAND_ALONE', 3:'PRECISE_POINT_POSITIONING', 4:'CODE_DIFF', 5:'RTK_FLOAT', 6:'RTK_FIXED', 7:'USER_AIDING'}
         self.nav_att_mode = {0:'INVALID', 1:'COARSE', 2:'FINE'}
         self.setting_folder = os.path.join(os.getcwd(), r'setting')  # use to store some configuration files.
@@ -58,6 +58,8 @@ class RoverDriver:
         if not self.rover_properties:
             os._exit(1)
         print('Rover driver start at:{0}'.format(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+        self.web_cmds = []
+        threading.Thread(target=self.auto_del_timeout_web_cmds, args=()).start()
 
     def reinit(self):
         ''' re-init parameters when occur SerialException.
@@ -238,7 +240,7 @@ class RoverDriver:
             print("Thread[{0}({1})] started.".format(t.name, t.ident))
             self.threads.append(t)
 
-        # self.query_rover_cfg_setup()
+        self.query_rover_cfg_setup()
         self.connection_status = 1
         
         if self.handle_KeyboardInterrupt():
@@ -404,10 +406,10 @@ class RoverDriver:
                 if self.app:
                     self.app.on_message(output_packet['name'], data, is_var_len_frame)
 
-                self.web_clients_lock.acquire()
-                for client in self.web_clients:
-                    client.on_driver_message(output_packet['name'], data, is_var_len_frame)
-                self.web_clients_lock.release()
+                # self.web_clients_lock.acquire()
+                # for client in self.web_clients:
+                #     client.on_driver_message(output_packet['name'], data, is_var_len_frame)
+                # self.web_clients_lock.release()
 
                 self.packet_handler(output_packet['name'], data, is_var_len_frame)
         elif header.startswith('AF2006'): # some messages start with 'AF2006' are different decoding rule with message list in rover.json, so need to handle specially.
@@ -428,12 +430,10 @@ class RoverDriver:
         PAYLOAD_TOPIC_IDX = 6
         payload_len = 256 * frame[PAYLOAD_LEN_IDX + 1] + frame[PAYLOAD_LEN_IDX]
         payload = frame[6:payload_len+6]   # extract the payload
-        # header = ''.join(["%02X" % x for x in frame[0:PAYLOAD_LEN_IDX]]).strip()
         sub_id = frame[PAYLOAD_SUB_ID_IDX]
         topic_tp = frame[PAYLOAD_TOPIC_IDX]
-        data = []
 
-        # ref msg8.4, rover report the 'IMU rotation matrix' and 'GNSS antenna lever arm' messages.
+        # UserConfiguration. ref msg8.4, rover report the 'IMU rotation matrix' and 'GNSS antenna lever arm' messages.
         if sub_id == 0X0C and topic_tp == 0X0A: 
             msg_060C_topic_0A = Msg_060C_topic_0A(frame)
             # update GNSS lever-arm by internal lever-arm.
@@ -443,16 +443,20 @@ class RoverDriver:
                     internal_lever_arm = msgs_internal_lever_arm['Internal lever-arm vector']
                     msg_060C_topic_0A.update_GNSS_lever_arm_by_internal_lever_arm(internal_lever_arm)
             self.msgs['Msg_060C_topic_0A'] = msg_060C_topic_0A
+
             # pack GNSS lever-arm json message.
-
             user_configuration_json_msg = msg_060C_topic_0A.pack_user_configuration_json_msg()
-            if self.app:
-                self.app.on_message("userConfiguration", user_configuration_json_msg, True)
-            self.web_clients_lock.acquire()
-            for client in self.web_clients:
-                client.on_driver_message("userConfiguration", user_configuration_json_msg, True)
-            self.web_clients_lock.release()
+            data = { 'messageType' : 'queryResponse', 'data' : {'packetType' : 'UserConfiguration', 'packet' : user_configuration_json_msg }}
+            print ("userConfiguration", json.dumps(data))
 
+            cmd_type = self.get_web_cmds('queryUserConfiguration')
+            if cmd_type: # send UserConfiguration to web client if web client has sent query cmd to driver.
+                if self.app:
+                    self.app.on_message("UserConfiguration", user_configuration_json_msg, True)
+                self.web_clients_lock.acquire()
+                for client in self.web_clients:
+                    client.on_driver_message(data)
+                self.web_clients_lock.release()
         elif sub_id == 0X0C and topic_tp == 0X04: # handle 'Internal Lever-arm' message.
             validity = payload[1] # Validity 0: Invalid, 1: Valid
             if validity:
@@ -463,24 +467,25 @@ class RoverDriver:
                 data['Validity'] = validity
                 data['Internal lever-arm vector'] = internal_lever_arm
                 self.msgs['Internal Lever-arm'] = data
-
+                print("internal_lever_arm:", data)
                 if 'Msg_060C_topic_0A' in self.msgs:
                     msg_060C_topic_0A = self.msgs['Msg_060C_topic_0A']
                     # center = housing mark + internal
                     msg_060C_topic_0A.update_GNSS_lever_arm_by_internal_lever_arm(internal_lever_arm)
         elif sub_id == 0X0C and topic_tp == 0X0C: # Firmware version
-            len_fmt = '{0}B'.format(payload_len)
-            b = struct.pack(len_fmt, *payload)
+            len_fmt = '{0}B'.format(payload_len-1)
+            b = struct.pack(len_fmt, *payload[1:])
             data = collections.OrderedDict()
             data['firmwareVersion'] = b.decode() # bytes to string
             if self.app:
-                self.app.on_message( "firmwareVersion", data, False)
+                self.app.on_message( "FirmwareVersion", data, False)
 
+            data = { 'messageType' : 'queryResponse', 'data' : {'packetType' : 'FirmwareVersion', 'packet' : data }}
             self.web_clients_lock.acquire()
             for client in self.web_clients:
-                client.on_driver_message( "firmwareVersion", data, False)
+                client.on_driver_message(data)
             self.web_clients_lock.release()
-        elif sub_id == 0X06: # System Response
+        elif sub_id == 0X06: # ref 8.1: System Response
             msg_type_request = payload[6]
             msg_sub_id_request = payload[7]
             response = payload[8]
@@ -491,10 +496,12 @@ class RoverDriver:
                     status = 0
                 elif response == 2: #NACK
                     status = 1
-                self.web_clients_lock.acquire()
-                for client in self.web_clients:
-                    client.on_driver_message('userConfiguration', {"returnStatus": status}, False)
-                self.web_clients_lock.release()
+                ##### to do ~!!!~!!!
+                # data = { 'messageType' : 'setResponse', 'data' : {'packetType' : 'IMURotationMatrix'/'GNSSAntennaLeverArm', 'packet' : {"returnStatus": status} }}
+                # self.web_clients_lock.acquire()
+                # for client in self.web_clients:
+                #     client.on_driver_message(data)
+                # self.web_clients_lock.release()
             #Internal Lever-arm Query
             elif msg_type_request == 0X06 and msg_sub_id_request == 0X0B and topic_tp == 0X04: 
                 if response == 1: #ACK
@@ -507,10 +514,16 @@ class RoverDriver:
             msg_NTRIP = Msg_NTRIP()
             msg_NTRIP.unpack_NTRIP_msg(frame)
             data = msg_NTRIP.pack_NTRIP_configuration_json_msg()
-            self.web_clients_lock.acquire()
-            for client in self.web_clients:
-                client.on_driver_message('NTRIPConfiguration', data, False)
-            self.web_clients_lock.release()
+
+            data = { 'messageType' : 'queryResponse', 'data' : {'packetType' : 'NTRIPConfiguration', 'packet' : data }}
+            print ('NTRIPConfiguration:', json.dumps(data))
+            
+            cmd_type = self.get_web_cmds('queryNTRIPConfiguration')
+            if cmd_type: # send UserConfiguration to web client if web client has sent query cmd to driver.
+                self.web_clients_lock.acquire()
+                for client in self.web_clients:
+                    client.on_driver_message(data)
+                self.web_clients_lock.release()
         else:
             pass
 
@@ -713,18 +726,24 @@ class RoverDriver:
         return True
 
     def packet_handler(self, packet_type, packet, is_var_len):
-        '''
-        Driver has to construct some packets based on existing packets,
-        such as 'NAV' (navigation information) packet which based on 'KFN','CNM' and 'GH'.
-        '''
-        TP_KFN = 'KFN' # msg tpyt is KFN
-        TP_CNM = 'CNM'
-        TP_GH = 'GH'
-        TP_NAV = 'NAV'
-        TP_SA = 'SA'
-        TP_NCA = 'NCA'
-        TP_SS = 'SS'
+        # need to restore in self.msgs
+        TP_KFN  = 'KFN'
+        TP_CNM  = 'CNM'
+        TP_GH   = 'GH'
+        TP_SA   = 'SA' # Sensor Activity
+        TP_NCA  = 'NCA' # NTRIP Client Activity
+        # NO need to push to self.msgs        
+        TP_SSS  = 'SSS'
+        TP_GSVM = 'GSVM'
+        TP_TSM  = 'TSM'
+        # msg_type should set to 'queryResponse' in Json msg.
+        TP_PID  = 'ProductID'
+        TP_EV   = 'EngineVersion'
+        # construct new type of message.
+        TP_NAV  = 'NAV'
+        TP_SS   = 'SS' # Subsystems Status
 
+        msg_type = 'event'
         # self.msgs is used to restore the newest packets.
         if TP_KFN == packet_type:
             self.msgs[TP_KFN] = packet
@@ -736,9 +755,27 @@ class RoverDriver:
             self.msgs[TP_SA] = packet
         elif TP_NCA == packet_type:
             self.msgs[TP_NCA] = packet
+        elif TP_PID == packet_type:
+            msg_type = 'queryResponse'
+            if not isinstance(packet['Product ID'], str):
+                packet['Product ID'] = str(packet['Product ID'])
+        elif TP_EV == packet_type:
+            msg_type = 'queryResponse'
         else:
             pass
 
+        # send to web client.
+        data = { 'messageType' : msg_type, 'data' : {'packetType' : packet_type, 'packet' : packet }}
+        self.web_clients_lock.acquire()
+        for client in self.web_clients:
+            client.on_driver_message(data)
+        self.web_clients_lock.release()
+
+        '''
+        Driver has to construct some packets based on existing packets,such as:
+        1. 'NAV' (navigation information) packet which based on 'KFN','CNM' and 'GH'.
+        2. 'SS' packet which based on 'SA' and 'NCA'
+        '''
         # make sure have received 'KFN', 'CNM' and 'GH' already before construct 'NAV'
         if TP_KFN in self.msgs and TP_CNM in self.msgs and TP_GH in self.msgs and TP_CNM == packet_type:
             r2d = 180/math.pi
@@ -781,15 +818,13 @@ class RoverDriver:
             if self.app:
                 self.app.on_message(TP_NAV, nav, False)
 
+            data = { 'messageType' : 'event', 'data' : {'packetType' : TP_NAV, 'packet' : nav }}
             self.web_clients_lock.acquire()
             for client in self.web_clients:
-                client.on_driver_message(TP_NAV, nav, False)
-            self.web_clients_lock.release()                     
+                client.on_driver_message(data)
+            self.web_clients_lock.release()
             # print (json.dumps(nav))
-            # print("***************")
-        # elif (TP_SA == packet_type and TP_NCA in self.msgs) \
-        # or (TP_NCA == packet_type and TP_SA in self.msgs):
-        
+            # print("***************")        
         elif TP_SA == packet_type:
             data = collections.OrderedDict()
             data['IMU Status'] = 1 if packet['IMU message count'] > 0 else 0
@@ -800,24 +835,26 @@ class RoverDriver:
             if self.app:
                 self.app.on_message(TP_SS, data, False)
 
+            data = { 'messageType' : 'event', 'data' : {'packetType' : TP_SS, 'packet' : data }}
             self.web_clients_lock.acquire()
             for client in self.web_clients:
-                client.on_driver_message(TP_SS, data, False)
-            self.web_clients_lock.release()                    
+                client.on_driver_message(data)
+            self.web_clients_lock.release()
         elif TP_NCA == packet_type:
             data = collections.OrderedDict()
-            data['IMU Status'] = 0
-            data['GNSS Status'] = 0
-            data['PPS Status'] = 0
+            data['IMU Status']   = 0
+            data['GNSS Status']  = 0
+            data['PPS Status']   = 0
             data['NTRIP Status'] = 1 if packet['NTRIP message size'] > 0 else 0
             self.msgs[TP_SS] = data
             if self.app:
                 self.app.on_message(TP_SS, data, False)
-                
+
+            data = { 'messageType' : 'event', 'data' : {'packetType' : TP_SS, 'packet' : data }}
             self.web_clients_lock.acquire()
             for client in self.web_clients:
-                client.on_driver_message(TP_SS, data, False)
-            self.web_clients_lock.release()                    
+                client.on_driver_message(data)
+            self.web_clients_lock.release()
         else:
             pass
 
@@ -829,29 +866,52 @@ class RoverDriver:
         CMD_TP_EVENT = 'event'
         CMD_TP_QUERY = 'query'
         CMD_TP_SET = 'set'
-        CMD_PRODUCT_ID = 'productID'
-        CMD_ENGINE_VERSION = 'engineVersion'
-        CMD_FIRMWARE_VERSION = 'firmwareVersion'
+        
+        CMD_MODEL = 'Model'
+        CMD_PRODUCT_ID = 'ProductID'
+        CMD_ENGINE_VERSION = 'EngineVersion'
+        CMD_FIRMWARE_VERSION = 'FirmwareVersion'
         CMD_IMU_ROTATION_MATRIX = 'IMURotationMatrix'
         CMD_GNSS_ANTENNA_LEVER_ARM = 'GNSSAntennaLeverArm'
-        CMD_USER_CONFIGURAION = 'userConfiguration'
+        CMD_USER_CONFIGURAION = 'UserConfiguration'
         CMD_NTRIP_CONFIGURAION = 'NTRIPConfiguration'
 
         if message['messageType'] == CMD_TP_QUERY:
-            if message['data']['packetType'] == CMD_PRODUCT_ID:
+            if message['data']['packetType'] == CMD_MODEL:
+                data = collections.OrderedDict()
+                data[CMD_MODEL] = 'INS1000'
+                packet = { 'messageType' : 'queryResponse', 'data' : {'packetType' : CMD_MODEL, 'packet' : data }}
+                # print (CMD_MODEL, json.dumps(packet))
+                self.web_clients_lock.acquire()
+                for client in self.web_clients:
+                    client.all_packets.append(packet)
+                self.web_clients_lock.release()
+            elif message['data']['packetType'] == CMD_PRODUCT_ID:
                 self.write(self.cmds['queryProductId'])
             elif message['data']['packetType'] == CMD_ENGINE_VERSION:
                 self.write(self.cmds['queryEngineVersion'])
             elif message['data']['packetType'] == CMD_FIRMWARE_VERSION:
                 self.write(self.cmds['queryFirmwareVersion'])
             elif message['data']['packetType'] == CMD_USER_CONFIGURAION:
+                self.data_lock.acquire()
+                self.web_cmds.append({'queryUserConfiguration' : datetime.datetime.now()})
+                self.data_lock.release()
                 self.write(self.cmds['queryUserConfiguration'])
             elif message['data']['packetType'] == CMD_NTRIP_CONFIGURAION:
+                self.data_lock.acquire()
+                self.web_cmds.append({'queryNTRIPConfiguration' : datetime.datetime.now()})
+                self.data_lock.release()
                 self.write(self.cmds['queryNTRIPConfiguration'])
+            else:
+                pass
         elif message['messageType'] == CMD_TP_SET:
             if message['data']['packetType'] == CMD_IMU_ROTATION_MATRIX:
-                matrix = list(message['data']['packet']['C{0}'.format(i)] for i in range(9))
+                # matrix = list(message['data']['packet'])
+                matrix = message['data']['packet']
                 if 'Msg_060C_topic_0A' in self.msgs:
+                    self.data_lock.acquire()
+                    self.web_cmds.append({'setIMURotationMatrix' : datetime.datetime.now()})
+                    self.data_lock.release()
                     msg_060C_topic_0A = self.msgs['Msg_060C_topic_0A']
                     msg_060C_topic_0A.set_imu_rotation_matrix(matrix)
                     msg_060C_topic_0A.pack_msg_060D()
@@ -870,6 +930,10 @@ class RoverDriver:
                 # ensure lever-arm is sorted by Antenna_ID.
                 lever_arm = [lever_arms[k] for k in sorted(lever_arms.keys())] 
                 if 'Msg_060C_topic_0A' in self.msgs:
+                    self.data_lock.acquire()
+                    self.web_cmds.append({'setGNSSAntennaLeverArm' : datetime.datetime.now()})
+                    self.data_lock.release()
+
                     msg_060C_topic_0A = self.msgs['Msg_060C_topic_0A']
                     if lever_arm_wrt_imu_center:
                         msg_060C_topic_0A.set_GNSS_lever_arm_center(lever_arm)
@@ -881,6 +945,10 @@ class RoverDriver:
                     self.write(self.cmds['queryUserConfiguration'])
                     # send NACK to web client
             elif message['data']['packetType'] == CMD_NTRIP_CONFIGURAION:
+                self.data_lock.acquire()
+                self.web_cmds.append({'setNTRIPConfiguration' : datetime.datetime.now()})
+                self.data_lock.release()
+
                 packet = message['data']['packet']
                 msg_NTRIP = Msg_NTRIP()
                 msg_NTRIP.pack_msg_NTRIP(packet)
@@ -894,9 +962,34 @@ class RoverDriver:
         query rover configurations setup
         '''
         self.write(self.cmds['queryInternalLeverArm'])
-        # time.sleep(0.1)
         self.write(self.cmds['queryUserConfiguration'])
         self.write(self.cmds['queryNTRIPConfiguration'])
+        pass
+
+    def auto_del_timeout_web_cmds(self):
+        TIME_OUT = 5
+        while (True):
+            now = datetime.datetime.now()
+            self.data_lock.acquire()
+            len_reversed_web_client = len(self.web_cmds)
+            for idx, cmd in enumerate(reversed(self.web_cmds)):
+                if (now-list(cmd.values())[0]).total_seconds() > TIME_OUT:
+                    del self.web_cmds[len_reversed_web_client-idx-1]
+            self.data_lock.release()
+            time.sleep(0.5)
+        pass
+
+    def get_web_cmds(self, cmd_type):
+        _cmd_tp = None
+        self.data_lock.acquire()
+        for idx, cmd in enumerate(self.web_cmds):
+            if cmd.keys()[0] == cmd_type:
+                _cmd_tp = cmd_type
+                del self.web_cmds[idx]
+                break
+        self.data_lock.release()
+        return _cmd_tp
+
 
     def write(self,n):
             try:

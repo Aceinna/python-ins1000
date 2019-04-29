@@ -3,14 +3,13 @@ Python driver for INS1000 RTK System
 
 
 ## Main features
-- automatically discover a Rover connected to serial port  TODO: make faster and more reliable
-- log data to local file
-- parse various ouput packets
-- run as a webserver for Aceinna Navigation Studio (ANS) web app and show trajectory, satellite signal strength and sky-view info.
+- Automatically discover a Rover connected to serial port  TODO: make faster and more reliable
+- Log data to local file
+- Parse various ouput packets
+- Run as a webserver for Aceinna Navigation Studio (ANS) web app and show trajectory, satellite signal strength and sky-view info.
 
 ## Testing environment 
 - Windows10: python2.7 and python 3.7
-- cygwin: python2.7 and python 3.6
 - Mac OS: python2.7 and python 3.7
 
 ## Steps
@@ -20,6 +19,7 @@ Python driver for INS1000 RTK System
 - tornado
 - azure
 - requests
+- asyncio (If python3)
 
 ### Run
 Run server.py to run as a webserver for Aceinna Navigation Studio (ANS) web app

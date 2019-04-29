@@ -4,7 +4,7 @@
   "description": "Rover",
   "userConfiguration":
     {
-      "hostAddress": "40.118.233.18"
+      "hostAddress": "10.0.20.56"
     },
   "userMessages": {
     "inputPackets": [],
@@ -154,7 +154,7 @@
         ]
       },
       {
-        "name": "PID",
+        "name": "ProductID",
         "header": "AF200506",
         "description": "Product ID Message.This message contains the identification number of the product. To receive this message send the message defined in Section 8.1.",
         "save2file": 0,
@@ -396,7 +396,7 @@
         ]
       },
       {
-        "name": "EV",
+        "name": "EngineVersion",
         "header": "AF200512",
         "description": "Engine Version Message.This message shows the engine version of the system.",
         "save2file": 0,
@@ -408,6 +408,13 @@
             "unit": ""
           }
         ]
+      },
+      {
+        "name": "FirmwareVersion",
+        "header": "NONE",
+        "description": "Firmware Version Message.This message shows the Firmware version of the system.",
+        "save2file": 0,
+        "send2web": 1
       },
       {
         "name": "GH",
@@ -617,7 +624,7 @@
         "send2web": 1
       },
       {
-        "name": "userConfiguration",
+        "name": "UserConfiguration",
         "header": "NONE",
         "description": "System response for User Configuration",
         "save2file": 0,

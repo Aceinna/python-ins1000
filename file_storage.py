@@ -107,7 +107,9 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
 
             # start a thread to upload logs to cloud here if necessary.
             self.db_user_access_token = db_user_access_token
-            threading.Thread(target=self.upload_to_azure_task, args=(self.user_log_file_names.copy(), )).start()
+            t = threading.Thread(target=self.upload_to_azure_task, args=(self.user_log_file_names.copy(), ))
+            t.start()
+            print("upload_to_azure_task[{0}({1})] started.".format(t.name, t.ident)) # for debug 
 
             self.user_log_file_rows.clear()
             self.user_log_file_names.clear()
@@ -170,7 +172,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
                 str += '{0:d},'.format(v)
             elif outputPcktType == 'double':
                 # double
-                str += '{0:15.12f},'.format(v)
+                str += '{0:15.8f},'.format(v)# 15.12
             elif outputPcktType == 'float':
                 str += '{0:12.4f},'.format(v) # 12.8
             elif outputPcktType == 'uint8':
@@ -255,7 +257,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
                         const_str += '{0:d},'.format(v)
                     elif outputPcktType == 'double':
                         # double
-                        const_str += '{0:15.12f},'.format(v)
+                        const_str += '{0:15.12f},'.format(v) # 15.12
                     elif outputPcktType == 'float':
                         const_str += '{0:12.4f},'.format(v) # 12.8
                     elif outputPcktType == 'uint8':
@@ -277,7 +279,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
                         var_str += '{0:d},'.format(v)
                     elif outputPcktType == 'double':
                         # double
-                        var_str += '{0:15.12f},'.format(v)
+                        var_str += '{0:15.12f},'.format(v)# 15.12
                     elif outputPcktType == 'float':
                         var_str += '{0:12.4f},'.format(v) # 12.8
                     elif outputPcktType == 'uint8':
@@ -321,7 +323,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
 
         try:
             # self.azureStorage('navview',account_key,'data', file_name, text)
-            self.azureStorage('navview',account_key,'data-1000', file_name, text)
+            self.azureStorage('navview', account_key, 'data-1000', file_name, text)
         except:
             # Try again!
             # self.azureStorage('navview', account_key, 'data', file_name, text)

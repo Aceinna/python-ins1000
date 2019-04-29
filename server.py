@@ -4,11 +4,11 @@ import os
 import datetime
 import time
 import threading
+import json
 import tornado.websocket
 import tornado.ioloop
 import tornado.httpserver
 import tornado.web
-import json
 import rover_application_base
 import driver_ins1000
 import file_storage
@@ -17,6 +17,7 @@ import utility
 
 class WSHandler(tornado.websocket.WebSocketHandler):
     clients = [] # reserve all web clients handlers.
+    start_stream = False
     def __init__(self, *args, **kwargs):
         tornado.websocket.WebSocketHandler.__init__(self, *args, **kwargs)
 
@@ -43,21 +44,24 @@ class WSHandler(tornado.websocket.WebSocketHandler):
     def send_data(self):
         data_lock.acquire()
         for p in self.all_packets:
-            for i, (k, v) in enumerate(p.items()):
-                if k == 'userConfiguration':
-                    json_msg = json.dumps({ 'messageType' : 'ack',  'data' : {'packetType' : k, 'packet' : v }})
-                else:
-                    json_msg = json.dumps({ 'messageType' : 'event',  'data' : {'packetType' : k, 'packet' : v }})
-                self.write_message(json_msg)
-                # print(json_msg)
-                # print('************')
-        self.all_packets = []
-        for i, (k, v) in enumerate(self.newest_packets.items()):
-            json_msg = json.dumps({ 'messageType' : 'event',  'data' : {'packetType' : k, 'packet' : v }})
+            tp = p['data']['packetType']
+            if not self.start_stream \
+                and (tp == 'SSS' or tp == 'GSVM' or tp == 'SS' \
+                    or tp == 'KNF' or tp == 'TSM' or tp == 'GH' ):
+                continue
+            json_msg = json.dumps(p)
             self.write_message(json_msg)
             # print(json_msg)
             # print('************')
-        self.newest_packets.clear()
+        self.all_packets = []
+
+        if self.start_stream:
+            for i, (k, v) in enumerate(self.newest_packets.items()):
+                json_msg = json.dumps(v)
+                self.write_message(json_msg)
+                # print(json_msg)
+                # print('#############')
+            self.newest_packets.clear()
         data_lock.release()
 
     def on_message(self, message):
@@ -68,15 +72,23 @@ class WSHandler(tornado.websocket.WebSocketHandler):
         data_lock.acquire()
         try:
             message = json.loads(message)
-            if message['messageType'] == 'event' and message['data']['packetType'] == 'startLog':
+            if message['messageType'] == 'operation' and message['data']['packetType'] == 'StartLog':
                 rev = rover_log.start_user_log(message['data']['packet']['userID'],message['data']['packet']['fileName'])
-                json_msg = json.dumps({"messageType":"ack","data":{"packetType":"startLog","packet":{"returnStatus":rev}}})
+                json_msg = json.dumps({'messageType':'operationResponse','data':{'packetType':'StartLog','packet':{'returnStatus':rev}}})
                 self.write_message(json_msg)
-            elif message['messageType'] == 'event' and message['data']['packetType'] == 'stopLog':
+            elif message['messageType'] == 'operation' and message['data']['packetType'] == 'StopLog':
                 rev = rover_log.stop_user_log(message['data']['packet']['userAccessToken'])
-                json_msg = json.dumps({"messageType":"ack","data":{"packetType":"stopLog","packet":{"returnStatus":rev}}})
+                json_msg = json.dumps({'messageType':'operationResponse','data':{'packetType':'StopLog','packet':{'returnStatus':rev}}})
                 # print(json_msg)
                 # print('************') 
+                self.write_message(json_msg)
+            elif message['messageType'] == 'operation' and message['data']['packetType'] == 'StartStream':
+                self.start_stream = True
+                json_msg = json.dumps({'messageType':'operationResponse','data':{'packetType':'StartStream','packet':{'returnStatus':0}}})
+                self.write_message(json_msg)
+            elif message['messageType'] == 'operation' and message['data']['packetType'] == 'StopStream':
+                self.start_stream = False
+                json_msg = json.dumps({'messageType':'operationResponse','data':{'packetType':'StartStream','packet':{'returnStatus':0}}})
                 self.write_message(json_msg)
             else:
                 driver.handle_cmd_msg(message)
@@ -99,21 +111,19 @@ class WSHandler(tornado.websocket.WebSocketHandler):
     def check_origin(self, origin):
         return True
 
-    def on_driver_message(self, *args):
+    def on_driver_message(self, packet):
         data_lock.acquire()
-        packet_type = args[0]
-        data = args[1]
-        is_var_len_frame = args[2]
-        # print('[{0}]:{1}'.format(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S'), packet_type))
+        # print('[{0}]:{1}'.format(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S'), packet))
+        packet_type = packet['data']['packetType']
+
         if packet_type in self.msgs_send2web:
             if packet_type == 'NAV': 
-                self.newest_packets[packet_type] = data
+                self.newest_packets[packet_type] = packet
             else: 
-                p = {packet_type:data}
-                self.all_packets.append(p)
+                # p = {packet_type:packet}
+                self.all_packets.append(packet)
         data_lock.release()
-        return True
-
+    
 
 class DataReceiver(rover_application_base.RoverApplicationBase):
     def __init__(self, user=False):
@@ -158,10 +168,20 @@ def driver_thread(driver):
             break
 
 def start_websocket_server():
-    application = tornado.web.Application([(r'/', WSHandler)])
-    http_server = tornado.httpserver.HTTPServer(application)
-    http_server.listen(8000)
-    tornado.ioloop.IOLoop.instance().start()
+    try:
+        if sys.version_info[0] > 2:
+            import asyncio
+            asyncio.set_event_loop(asyncio.new_event_loop()) # bug fix:"There is no current event loop in thread 'Thread-n'." ref:https://www.wanghaiqing.com/article/daa4cde1-b6b7-4f8c-92a5-99f0dce80d6c/
+        application = tornado.web.Application([(r'/', WSHandler)])
+        http_server = tornado.httpserver.HTTPServer(application)
+        http_server.listen(8000)
+        tornado.ioloop.IOLoop.instance().start()
+    except KeyboardInterrupt:  # response for KeyboardInterrupt such as Ctrl+C
+        print('User stop this program by KeyboardInterrupt! File:[{0}], Line:[{1}]'.format(__file__, sys._getframe().f_lineno))
+        os._exit(1)
+    except Exception as e:
+        print(e)
+
 
 if __name__ == '__main__':
     '''main'''
@@ -174,8 +194,9 @@ if __name__ == '__main__':
         driver.set_app(data_receiver)
         threading.Thread(target=driver_thread, args=(driver,)).start()
         rover_log = file_storage.RoverLogApp()  # log data.
-
-        start_websocket_server()
+        threading.Thread(target=start_websocket_server, args=()).start()
+        while (True):
+            time.sleep(1)
     except KeyboardInterrupt:  # response for KeyboardInterrupt such as Ctrl+C
         print('User stop this program by KeyboardInterrupt! File:[{0}], Line:[{1}]'.format(__file__, sys._getframe().f_lineno))
         os._exit(1)

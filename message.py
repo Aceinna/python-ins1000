@@ -254,7 +254,7 @@ class Msg_060C_topic_0A(object):
         data['Minimum GNSS velocity'] = self.min_vel
         data['Maximum unaided time'] = self.max_unaided_time
         data['Maximum Nav Output Rate'] = int(self.max_output_rate * self.SCALING_MAX_OUTPUT_RATE)
-        data['IMU Rotation Matrix'] = self.imu_rotation_matrix.copy()
+        data['IMU Rotation Matrix'] = self.imu_rotation_matrix[:] 
         data['Output position offset'] = list(p*self.SCALING_OUTPUT_POSITION_OFFSET for p in self.output_position_offset)
 
         lever_arms = []
