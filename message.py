@@ -237,8 +237,8 @@ class Msg_060C_topic_0A(object):
         self.msg_060D_cmd[PAYLOAD_LEN_IDX:PAYLOAD_LEN_IDX] = v
         # fill check_sum.
         result = utility.check_sum(self.msg_060D_cmd[PAYLOAD_LEN_IDX + 2:])
-        self.msg_060D_cmd.append(result[1]) 
         self.msg_060D_cmd.append(result[0]) 
+        self.msg_060D_cmd.append(result[1]) 
         pass
 
     def pack_user_configuration_json_msg(self):
@@ -474,10 +474,9 @@ class Msg_NTRIP(object):
         b = bytes(80-len(b)) 
         self.msg_ntrip_cmd += b # add \x00
 
-
         result = utility.check_sum(self.msg_ntrip_cmd[PAYLOAD_LEN_IDX + 2:])
-        self.msg_ntrip_cmd.append(result[1]) 
-        self.msg_ntrip_cmd.append(result[0]) 
+        self.msg_ntrip_cmd.append(result[0])
+        self.msg_ntrip_cmd.append(result[1])
 
     def pack_NTRIP_configuration_json_msg(self):
         '''
@@ -491,7 +490,7 @@ class Msg_NTRIP(object):
             data['Reference frame'] = 'WGS84' 
         elif self.reference_frame == 1:
             data['Reference frame'] = 'NAD83' 
-        data['User'] = self.user
+        data['User'] = self.user if self.user != "no**username" else ''
         data['Password'] = self.password
         data['Mount point'] = self.mount_point
         return data

@@ -436,6 +436,7 @@ class RoverDriver:
         # UserConfiguration. ref msg8.4, rover report the 'IMU rotation matrix' and 'GNSS antenna lever arm' messages.
         if sub_id == 0X0C and topic_tp == 0X0A: 
             msg_060C_topic_0A = Msg_060C_topic_0A(frame)
+
             # update GNSS lever-arm by internal lever-arm.
             if 'Internal Lever-arm' in self.msgs:
                 msgs_internal_lever_arm = self.msgs['Internal Lever-arm']
@@ -451,8 +452,8 @@ class RoverDriver:
 
             cmd_type = self.get_web_cmds('queryUserConfiguration')
             if cmd_type: # send UserConfiguration to web client if web client has sent query cmd to driver.
-                if self.app:
-                    self.app.on_message("UserConfiguration", user_configuration_json_msg, True)
+                # if self.app:
+                #     self.app.on_message("UserConfiguration", user_configuration_json_msg, True)
                 self.web_clients_lock.acquire()
                 for client in self.web_clients:
                     client.on_driver_message(data)
@@ -486,31 +487,42 @@ class RoverDriver:
                 client.on_driver_message(data)
             self.web_clients_lock.release()
         elif sub_id == 0X06: # ref 8.1: System Response
-            msg_type_request = payload[6]
-            msg_sub_id_request = payload[7]
-            response = payload[8]
-            topic_tp = payload[9]
+            msg_type_request = payload[0]
+            msg_sub_id_request = payload[1]
+            response = payload[2]
+            topic_tp = payload[3]
             # User Configuration Setup, such as IMU matrix and GNSS lever-arm
             if msg_type_request == 0X06 and msg_sub_id_request == 0X0D and topic_tp == 0X0A:
                 if response == 1: #ACK
                     status = 0
                 elif response == 2: #NACK
                     status = 1
-                ##### to do ~!!!~!!!
-                # data = { 'messageType' : 'setResponse', 'data' : {'packetType' : 'IMURotationMatrix'/'GNSSAntennaLeverArm', 'packet' : {"returnStatus": status} }}
-                # self.web_clients_lock.acquire()
-                # for client in self.web_clients:
-                #     client.on_driver_message(data)
-                # self.web_clients_lock.release()
-            #Internal Lever-arm Query
-            elif msg_type_request == 0X06 and msg_sub_id_request == 0X0B and topic_tp == 0X04: 
+                else: 
+                    status = 1
+
+                cmd_type = self.get_web_cmds('setUserConfiguration')
+                if cmd_type:
+                    data = { 'messageType' : 'setResponse', 'data' : {'packetType' : cmd_type, 'packet' : {'returnStatus':status} }}
+                    # if self.app:
+                    #     self.app.on_message("UserConfiguration", user_configuration_json_msg, True)
+                    self.web_clients_lock.acquire()
+                    for client in self.web_clients:
+                        client.on_driver_message(data)
+                    self.web_clients_lock.release()
+            elif msg_type_request == 0X06 and msg_sub_id_request == 0X0A and topic_tp == 0X01: 
                 if response == 1: #ACK
                     pass
                 elif response == 2: #NACK
-                    self.query_rover_cfg_setup()
+                    pass
+            #Internal Lever-arm Query
+            # elif msg_type_request == 0X06 and msg_sub_id_request == 0X0B and topic_tp == 0X04: 
+            #     if response == 1: #ACK
+            #         pass
+            #     elif response == 2: #NACK
+            #         self.query_rover_cfg_setup()
             else:
                 print('Receive system response, msg_type:{0}, msg_sub_id:{1}, topic:{2}'.format(msg_type_request, msg_sub_id_request, topic_tp))
-        elif sub_id == 0X0A and topic_tp == 0X03 and payload_len == 155: # NTIP cfg response.
+        elif sub_id == 0X0A and topic_tp == 0X03 and payload_len == 155: # NTIP query response.
             msg_NTRIP = Msg_NTRIP()
             msg_NTRIP.unpack_NTRIP_msg(frame)
             data = msg_NTRIP.pack_NTRIP_configuration_json_msg()
@@ -916,6 +928,10 @@ class RoverDriver:
                     msg_060C_topic_0A.set_imu_rotation_matrix(matrix)
                     msg_060C_topic_0A.pack_msg_060D()
                     self.write(msg_060C_topic_0A.msg_060D_cmd)
+                    # l=[] # for debug
+                    # for b in msg_060C_topic_0A.msg_060D_cmd:
+                    #     l.append(hex(b))
+                    # print(l)
                 else:
                     self.write(self.cmds['queryUserConfiguration'])
                     # send NACK to web client
@@ -983,10 +999,23 @@ class RoverDriver:
         _cmd_tp = None
         self.data_lock.acquire()
         for idx, cmd in enumerate(self.web_cmds):
-            if cmd.keys()[0] == cmd_type:
+            if cmd_type == 'setUserConfiguration':
+                if list(cmd.keys())[0] == 'setIMURotationMatrix':
+                    _cmd_tp = 'IMURotationMatrix'
+                    del self.web_cmds[idx]
+                    break                    
+                elif list(cmd.keys())[0] == 'setGNSSAntennaLeverArm':
+                    _cmd_tp = 'GNSSAntennaLeverArm'
+                    del self.web_cmds[idx]
+                    break                    
+                else:
+                    pass
+            elif list(cmd.keys())[0] == cmd_type:
                 _cmd_tp = cmd_type
                 del self.web_cmds[idx]
                 break
+            else:
+                pass    
         self.data_lock.release()
         return _cmd_tp
 
