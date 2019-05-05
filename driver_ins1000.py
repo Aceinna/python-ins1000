@@ -960,6 +960,7 @@ class RoverDriver:
                 else:
                     self.write(self.cmds['queryUserConfiguration'])
                     # send NACK to web client
+
             elif message['data']['packetType'] == CMD_NTRIP_CONFIGURAION:
                 self.data_lock.acquire()
                 self.web_cmds.append({'setNTRIPConfiguration' : datetime.datetime.now()})
@@ -968,7 +969,10 @@ class RoverDriver:
                 packet = message['data']['packet']
                 msg_NTRIP = Msg_NTRIP()
                 msg_NTRIP.pack_msg_NTRIP(packet)
+                # cmd = [hex(d) for d in msg_NTRIP.msg_ntrip_cmd]
+                # print(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S:') + " ".join(cmd))
                 self.write(msg_NTRIP.msg_ntrip_cmd)
+
         else:
             pass
         pass

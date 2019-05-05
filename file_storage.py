@@ -34,7 +34,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
         # azure app.
         self.user_id = ''
         self.file_name = ''
-        self.blob_user_access_token = '' # Reserved.
+        self.blob_user_access_token = '' 
         self.db_user_access_token = ''
         self.host_address = self.rover_properties['userConfiguration']['hostAddress']
 
@@ -97,7 +97,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
             print(e)
             return 2
 
-    def stop_user_log(self, db_user_access_token):
+    def stop_user_log(self, db_user_access_token, cloud_sas_token):
         try:
             if len(self.user_log_file_rows) == 0:
                 return 1 # driver hasn't started logging files yet.
@@ -107,9 +107,11 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
 
             # start a thread to upload logs to cloud here if necessary.
             self.db_user_access_token = db_user_access_token
-            t = threading.Thread(target=self.upload_to_azure_task, args=(self.user_log_file_names.copy(), ))
-            t.start()
-            print("upload_to_azure_task[{0}({1})] started.".format(t.name, t.ident)) # for debug 
+            self.blob_user_access_token = cloud_sas_token
+            if self.db_user_access_token != '' and self.blob_user_access_token != '':
+                t = threading.Thread(target=self.upload_to_azure_task, args=(self.user_log_file_names.copy(), ))
+                t.start()
+                # print("upload_to_azure_task[{0}({1})] started.".format(t.name, t.ident)) # for debug 
 
             self.user_log_file_rows.clear()
             self.user_log_file_names.clear()
@@ -120,8 +122,13 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
             return 2
 
     def upload_to_azure_task(self, log_files_dict):
+        print(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S:') , 'Start.')
         for i, (k, v) in enumerate(log_files_dict.items()): # k: packet type; v: log file name
             self.uploadtoAzure(k, v)
+        self.db_user_access_token = ''
+        self.blob_user_access_token = ''    
+        # print('upload_to_azure_task done.')
+        print(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S:') , 'Done.')
 
     def log(self, data, packet_type):
         ''' Parse the data, read in from the unit, and generate a data file using
@@ -318,24 +325,26 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
     '''
     def uploadtoAzure(self, packet_type, file_name):
         f = open("data/" + file_name, "r")
-        text = f.read()
-        account_key = '+roYuNmQbtLvq2Tn227ELmb6s1hzavh0qVQwhLORkUpM0DN7gxFc4j+DF/rEla1EsTN2goHEA1J92moOM/lfxg=='
+        text = f.read() #.decode("utf-8")
 
         try:
-            # self.azureStorage('navview',account_key,'data', file_name, text)
-            self.azureStorage('navview', account_key, 'data-1000', file_name, text)
-        except:
+            self.azureStorage('navview', self.blob_user_access_token, 'data-1000', file_name, text)
+        except Exception as e:
+            print('azureStorage exception:', e)
             # Try again!
-            # self.azureStorage('navview', account_key, 'data', file_name, text)
-            self.azureStorage('navview', account_key, 'data-1000', file_name, text)
+            # self.azureStorage('navview', self.blob_user_access_token, 'data-1000', file_name, text)
+            pass
 
         ''' Trigger Database upload
         '''
-        self.savetoAnsPlatform(packet_type, file_name)
+        rev = self.savetoAnsPlatform(packet_type, file_name)
+        if not rev:
+            print('savetoAnsPlatform failed.')
 
-    def azureStorage(self, accountName, accountkey, countainerName,fileName,text):
+
+    def azureStorage(self, accountName, sasToken, countainerName,fileName,text):
         self.append_blob_service = AppendBlobService(account_name=accountName,
-                                                     account_key=accountkey,
+                                                     sas_token=sasToken,
                                                      protocol='http')
         self.append_blob_service.create_blob(container_name=countainerName, blob_name=fileName,
                                              content_settings=ContentSettings(content_type='text/plain'))
@@ -345,17 +354,17 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
     ''' Upload CSV related information to the database.
     '''
     def savetoAnsPlatform(self, packet_type, file_name):
-        if self.db_user_access_token == '':
-            self.db_user_access_token = 'dNKBMAJitNN1oQEFezCxXKJevj5Vgo8EQhoUJY9kB2xxZkkVHrefBabI7S5BAnJj' # for debug.
+        try:
+            data = {"type": 'INS', "model": 'INS1000', "fileName": file_name, "url": file_name, "userId": self.user_id, 
+                    "logInfo": { "pn": '11', "sn": '', "packetType":packet_type,"insProperties":json.dumps(self.rover_properties)}}
 
-        data = {"type": 'INS', "model": 'INS1000', "fileName": file_name, "url": file_name, "userId": self.user_id, 
-                "logInfo": { "pn": '11', "sn": '', "packetType":packet_type,"insProperties":json.dumps(self.rover_properties)}}
-
-        url = "http://" + self.host_address + ":3000/api/recordLogs/post"
-        data_json = json.dumps(data)
-        headers = {'Content-type': 'application/json', 'Authorization': self.db_user_access_token}
-        response = requests.post(url, data=data_json, headers=headers)
-        response = response.json()
+            url = "http://" + self.host_address + ":3000/api/recordLogs/post"
+            data_json = json.dumps(data)
+            headers = {'Content-type': 'application/json', 'Authorization': self.db_user_access_token}
+            response = requests.post(url, data=data_json, headers=headers)
+            return True if 'success' in response.json() else False
+        except Exception as e:
+            print('Exception when update db:', e)
 
     def close(self):
         pass
@@ -380,6 +389,6 @@ def main():
         if not driver.start_collection():
             break
 
+
 if __name__ == '__main__':
     main()
-    

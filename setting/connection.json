@@ -1,1 +1,1 @@
-{"port": "/dev/tty.usbserial", "baud": 230400}
+{"baud": 230400, "port": "COM4"}

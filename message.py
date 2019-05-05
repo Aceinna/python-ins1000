@@ -430,12 +430,12 @@ class Msg_NTRIP(object):
     def pack_msg_NTRIP(self, json_msg):
         '''
         pack NTRIP configuration message. ref 8.11. NTRIP configuration. 
-        This message is used to sent to INS1000 Rover to setup NTRIP Configuration.
+        This message is used to set INS1000 NTRIP Configuration.
         '''
         PAYLOAD_LEN_IDX = 4
         FRAME_HEADER = bytearray(b'\xAF\x20\x06\x0A\x9B\x00\x02')
         self.msg_ntrip_cmd = copy.deepcopy(FRAME_HEADER)
-        print(json_msg)
+        # print(json_msg)
         self.server = json_msg['Server']
         self.port = int(json_msg['Port'])
         if json_msg['Reference frame'] == 'WGS84':
@@ -444,7 +444,7 @@ class Msg_NTRIP(object):
             self.reference_frame = 1
         else:
             self.reference_frame = 0
-        self.user = json_msg['User']
+        self.user = json_msg['User'] if json_msg['User'] != '' else "no**username"
         self.password = json_msg['Password']
         self.mount_point = json_msg['Mount point']
 

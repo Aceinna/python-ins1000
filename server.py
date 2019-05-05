@@ -45,9 +45,10 @@ class WSHandler(tornado.websocket.WebSocketHandler):
         data_lock.acquire()
         for p in self.all_packets:
             tp = p['data']['packetType']
-            if not self.start_stream \
-                and (tp == 'SSS' or tp == 'GSVM' or tp == 'SS' \
-                    or tp == 'KNF' or tp == 'TSM' or tp == 'GH' ):
+            # if not self.start_stream \
+            #     and (tp == 'SSS' or tp == 'GSVM' or tp == 'SS' \
+            #         or tp == 'KNF' or tp == 'TSM' or tp == 'GH' ):
+            if not self.start_stream:
                 continue
             json_msg = json.dumps(p)
             self.write_message(json_msg)
@@ -77,7 +78,7 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                 json_msg = json.dumps({'messageType':'operationResponse','data':{'packetType':'StartLog','packet':{'returnStatus':rev}}})
                 self.write_message(json_msg)
             elif message['messageType'] == 'operation' and message['data']['packetType'] == 'StopLog':
-                rev = rover_log.stop_user_log(message['data']['packet']['userAccessToken'])
+                rev = rover_log.stop_user_log(message['data']['packet']['accessToken'], message['data']['packet']['sasToken'])
                 json_msg = json.dumps({'messageType':'operationResponse','data':{'packetType':'StopLog','packet':{'returnStatus':rev}}})
                 # print(json_msg)
                 # print('************') 
