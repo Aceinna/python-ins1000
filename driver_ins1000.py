@@ -448,7 +448,7 @@ class RoverDriver:
             # pack GNSS lever-arm json message.
             user_configuration_json_msg = msg_060C_topic_0A.pack_user_configuration_json_msg()
             data = { 'messageType' : 'queryResponse', 'data' : {'packetType' : 'UserConfiguration', 'packet' : user_configuration_json_msg }}
-            print ("userConfiguration", json.dumps(data))
+            # print ("userConfiguration:", json.dumps(data))
 
             cmd_type = self.get_web_cmds('queryUserConfiguration')
             if cmd_type: # send UserConfiguration to web client if web client has sent query cmd to driver.
@@ -468,7 +468,7 @@ class RoverDriver:
                 data['Validity'] = validity
                 data['Internal lever-arm vector'] = internal_lever_arm
                 self.msgs['Internal Lever-arm'] = data
-                print("internal_lever_arm:", data)
+                # print("internal_lever_arm:", data)
                 if 'Msg_060C_topic_0A' in self.msgs:
                     msg_060C_topic_0A = self.msgs['Msg_060C_topic_0A']
                     # center = housing mark + internal
@@ -528,7 +528,7 @@ class RoverDriver:
             data = msg_NTRIP.pack_NTRIP_configuration_json_msg()
 
             data = { 'messageType' : 'queryResponse', 'data' : {'packetType' : 'NTRIPConfiguration', 'packet' : data }}
-            print ('NTRIPConfiguration:', json.dumps(data))
+            # print ('NTRIPConfiguration:', json.dumps(data))
             
             cmd_type = self.get_web_cmds('queryNTRIPConfiguration')
             if cmd_type: # send UserConfiguration to web client if web client has sent query cmd to driver.

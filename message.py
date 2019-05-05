@@ -176,11 +176,12 @@ class Msg_060C_topic_0A(object):
         self.msg_060D_cmd.append(self.flags) # uint8_t
         self.msg_060D_cmd.append(self.ICD_num) # uint8_t
         self.msg_060D_cmd.append(self.min_vel) # uint8_t
-        v = self.max_unaided_time.to_bytes(2, byteorder='little', signed=False) # uint16_t
+        # v = self.max_unaided_time.to_bytes(2, byteorder='little', signed=False) # uint16_t  #use struct.pack instead of to_bytes to compat python2.
+        v = struct.pack('<H', self.max_unaided_time) # uint16_t
         self.msg_060D_cmd += v
 
-        v = (self.max_output_rate).to_bytes(2, byteorder='little', signed=False) # uint16_t
-        # v = (1051).to_bytes(2, byteorder='little', signed=False) # uint16_t
+        # v = (self.max_output_rate).to_bytes(2, byteorder='little', signed=False) # uint16_t
+        v = struct.pack('<H', self.max_output_rate) # uint16_t
         self.msg_060D_cmd += v
 
         v = struct.pack('<9d', *(self.imu_rotation_matrix)) # double[3][3]
@@ -232,7 +233,8 @@ class Msg_060C_topic_0A(object):
 
         # fill payload length.
         msg_060D_payload_length = len(self.msg_060D_cmd) - len(FRAME_HEADER)
-        v = msg_060D_payload_length.to_bytes(2, byteorder='little', signed=False) # uint16_t
+        v = struct.pack('<H', msg_060D_payload_length) # uint16_t
+        
         PAYLOAD_LEN_IDX = 4
         self.msg_060D_cmd[PAYLOAD_LEN_IDX:PAYLOAD_LEN_IDX] = v
         # fill check_sum.
@@ -453,10 +455,12 @@ class Msg_NTRIP(object):
         b = bytes(30-len(b)) 
         self.msg_ntrip_cmd += b # add \x00
 
-        v = self.port.to_bytes(2, byteorder='little', signed=False) # uint16_t
+        # v = self.port.to_bytes(2, byteorder='little', signed=False) # uint16_t
+        v = struct.pack('<H', self.port) # uint16_t
         self.msg_ntrip_cmd += v
 
-        v = self.reference_frame.to_bytes(2, byteorder='little', signed=False) # uint16_t
+        # v = self.reference_frame.to_bytes(2, byteorder='little', signed=False) # uint16_t
+        v = struct.pack('<H', self.reference_frame) # uint16_t
         self.msg_ntrip_cmd += v
 
         b = bytes(self.user, encoding='utf-8')
