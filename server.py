@@ -45,10 +45,9 @@ class WSHandler(tornado.websocket.WebSocketHandler):
         data_lock.acquire()
         for p in self.all_packets:
             tp = p['data']['packetType']
-            # if not self.start_stream \
-            #     and (tp == 'SSS' or tp == 'GSVM' or tp == 'SS' \
-            #         or tp == 'KNF' or tp == 'TSM' or tp == 'GH' ):
-            if not self.start_stream:
+            if not self.start_stream \
+                and (tp == 'SSS' or tp == 'GSVM' or tp == 'SS' \
+                    or tp == 'KNF' or tp == 'TSM' or tp == 'GH' ):
                 continue
             json_msg = json.dumps(p)
             self.write_message(json_msg)
