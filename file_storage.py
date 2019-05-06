@@ -331,6 +331,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
             self.azureStorage('navview', self.blob_user_access_token, 'data-1000', file_name, text)
         except Exception as e:
             print('azureStorage exception:', e)
+            return
             # Try again!
             # self.azureStorage('navview', self.blob_user_access_token, 'data-1000', file_name, text)
             pass
