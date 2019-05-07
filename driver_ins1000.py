@@ -34,13 +34,15 @@ class RoverDriver:
         self.baud = 0
         self.ser = None  # the active UART
         self.threads = []  # thread of receiver and paser
-        self.data_queue = Queue()  # data container
         self.exit_thread = False  # flag of exit threads
         self.exit_lock = threading.Lock()  # lock of exit_thread
+        self.data_queue = Queue()  # data container
         self.data_lock = threading.Lock()  # lock of data_queue
-        self.web_clients_lock = threading.Lock()  # lock of data_queue
-        self.app = None
         self.web_clients = []
+        self.web_clients_lock = threading.Lock()  # lock of web_clients
+        self.web_cmds = []
+        self.web_cmds_lock = threading.Lock() # lock of web_cmds
+        self.app = None
         self.msgs = {}
         self.cmds = {}
         self.connection_status = 0 # 0: unconnected 1:connected.
@@ -58,7 +60,6 @@ class RoverDriver:
         if not self.rover_properties:
             os._exit(1)
         print('Rover driver start at:{0}'.format(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
-        self.web_cmds = []
         threading.Thread(target=self.auto_del_timeout_web_cmds, args=()).start()
 
     def reinit(self):
@@ -905,14 +906,14 @@ class RoverDriver:
             elif message['data']['packetType'] == CMD_FIRMWARE_VERSION:
                 self.write(self.cmds['queryFirmwareVersion'])
             elif message['data']['packetType'] == CMD_USER_CONFIGURAION:
-                self.data_lock.acquire()
+                self.web_cmds_lock.acquire()
                 self.web_cmds.append({'queryUserConfiguration' : datetime.datetime.now()})
-                self.data_lock.release()
+                self.web_cmds_lock.release()
                 self.write(self.cmds['queryUserConfiguration'])
             elif message['data']['packetType'] == CMD_NTRIP_CONFIGURAION:
-                self.data_lock.acquire()
+                self.web_cmds_lock.acquire()
                 self.web_cmds.append({'queryNTRIPConfiguration' : datetime.datetime.now()})
-                self.data_lock.release()
+                self.web_cmds_lock.release()
                 self.write(self.cmds['queryNTRIPConfiguration'])
             else:
                 pass
@@ -921,9 +922,9 @@ class RoverDriver:
                 # matrix = list(message['data']['packet'])
                 matrix = message['data']['packet']
                 if 'Msg_060C_topic_0A' in self.msgs:
-                    self.data_lock.acquire()
+                    self.web_cmds_lock.acquire()
                     self.web_cmds.append({'setIMURotationMatrix' : datetime.datetime.now()})
-                    self.data_lock.release()
+                    self.web_cmds_lock.release()
                     msg_060C_topic_0A = self.msgs['Msg_060C_topic_0A']
                     msg_060C_topic_0A.set_imu_rotation_matrix(matrix)
                     msg_060C_topic_0A.pack_msg_060D()
@@ -946,9 +947,9 @@ class RoverDriver:
                 # ensure lever-arm is sorted by Antenna_ID.
                 lever_arm = [lever_arms[k] for k in sorted(lever_arms.keys())] 
                 if 'Msg_060C_topic_0A' in self.msgs:
-                    self.data_lock.acquire()
+                    self.web_cmds_lock.acquire()
                     self.web_cmds.append({'setGNSSAntennaLeverArm' : datetime.datetime.now()})
-                    self.data_lock.release()
+                    self.web_cmds_lock.release()
 
                     msg_060C_topic_0A = self.msgs['Msg_060C_topic_0A']
                     if lever_arm_wrt_imu_center:
@@ -962,9 +963,9 @@ class RoverDriver:
                     # send NACK to web client
 
             elif message['data']['packetType'] == CMD_NTRIP_CONFIGURAION:
-                self.data_lock.acquire()
+                self.web_cmds_lock.acquire()
                 self.web_cmds.append({'setNTRIPConfiguration' : datetime.datetime.now()})
-                self.data_lock.release()
+                self.web_cmds_lock.release()
 
                 packet = message['data']['packet']
                 msg_NTRIP = Msg_NTRIP()
@@ -990,18 +991,18 @@ class RoverDriver:
         TIME_OUT = 5
         while (True):
             now = datetime.datetime.now()
-            self.data_lock.acquire()
+            self.web_cmds_lock.acquire()
             len_reversed_web_client = len(self.web_cmds)
             for idx, cmd in enumerate(reversed(self.web_cmds)):
                 if (now-list(cmd.values())[0]).total_seconds() > TIME_OUT:
                     del self.web_cmds[len_reversed_web_client-idx-1]
-            self.data_lock.release()
+            self.web_cmds_lock.release()
             time.sleep(0.5)
         pass
 
     def get_web_cmds(self, cmd_type):
         _cmd_tp = None
-        self.data_lock.acquire()
+        self.web_cmds_lock.acquire()
         for idx, cmd in enumerate(self.web_cmds):
             if cmd_type == 'setUserConfiguration':
                 if list(cmd.keys())[0] == 'setIMURotationMatrix':
@@ -1020,7 +1021,7 @@ class RoverDriver:
                 break
             else:
                 pass    
-        self.data_lock.release()
+        self.web_cmds_lock.release()
         return _cmd_tp
 
 

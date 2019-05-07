@@ -17,14 +17,17 @@ import utility
 
 class WSHandler(tornado.websocket.WebSocketHandler):
     clients = [] # reserve all web clients handlers.
-    start_stream = False
+    
     def __init__(self, *args, **kwargs):
         tornado.websocket.WebSocketHandler.__init__(self, *args, **kwargs)
 
         self.newest_packets = {}
         self.all_packets = []
         self.msgs_send2web = []
-
+        self.data_lock = threading.Lock() # lock of all_packets and msgs_send2web.
+        self.start_stream = False
+        self.ii = 0
+        
         rover_properties = utility.load_configuration(os.path.join('setting', 'rover.json'))
         if not rover_properties:
             os._exit(1)
@@ -42,7 +45,7 @@ class WSHandler(tornado.websocket.WebSocketHandler):
         self.callback.start()
 
     def send_data(self):
-        data_lock.acquire()
+        self.data_lock.acquire()
         for p in self.all_packets:
             tp = p['data']['packetType']
             if not self.start_stream \
@@ -55,29 +58,33 @@ class WSHandler(tornado.websocket.WebSocketHandler):
             # print('************')
         self.all_packets = []
 
-        if self.start_stream:
-            for i, (k, v) in enumerate(self.newest_packets.items()):
-                json_msg = json.dumps(v)
-                self.write_message(json_msg)
-                # print(json_msg)
-                # print('#############')
-            self.newest_packets.clear()
-        data_lock.release()
+        for i, (k, v) in enumerate(self.newest_packets.items()):
+            if not self.start_stream and (k == 'NAV' or k == 'CNM'):
+                continue
+            json_msg = json.dumps(v)
+            self.write_message(json_msg)
+            # print(json_msg)
+            # print('#############')
+        self.newest_packets.clear()
+        self.data_lock.release()
 
     def on_message(self, message):
         # if driver.connection_status == 0:
         #     json_msg = json.dumps({ 'messageType' : 'event',  'data' : {'packetType' : 'ConnectionStatus', 'packet' : {'ConnectionStatus' : 0} }})
         #     self.write_message(json_msg)
         #     return
-        data_lock.acquire()
         try:
             message = json.loads(message)
             if message['messageType'] == 'operation' and message['data']['packetType'] == 'StartLog':
+                rover_log_lock.acquire()
                 rev = rover_log.start_user_log(message['data']['packet']['userID'],message['data']['packet']['fileName'])
+                rover_log_lock.release()
                 json_msg = json.dumps({'messageType':'operationResponse','data':{'packetType':'StartLog','packet':{'returnStatus':rev}}})
                 self.write_message(json_msg)
             elif message['messageType'] == 'operation' and message['data']['packetType'] == 'StopLog':
+                rover_log_lock.acquire()
                 rev = rover_log.stop_user_log(message['data']['packet']['accessToken'], message['data']['packet']['sasToken'])
+                rover_log_lock.release()
                 json_msg = json.dumps({'messageType':'operationResponse','data':{'packetType':'StopLog','packet':{'returnStatus':rev}}})
                 # print(json_msg)
                 # print('************') 
@@ -96,7 +103,6 @@ class WSHandler(tornado.websocket.WebSocketHandler):
             #     file_storage.RoverLogApp(message['data'])
         except Exception as e:
                 print(e)
-        data_lock.release()
 
     def on_close(self):
         try:
@@ -112,9 +118,11 @@ class WSHandler(tornado.websocket.WebSocketHandler):
         return True
 
     def on_driver_message(self, packet):
-        data_lock.acquire()
-        # print('[{0}]:{1}'.format(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S'), packet))
+        self.data_lock.acquire()
         packet_type = packet['data']['packetType']
+        # if packet_type == 'CNM':
+        #     self.ii = self.ii + 1
+        #     print('[{0}]:{1}'.format(datetime.datetime.now().strftime('%S'), self.ii))
 
         if packet_type in self.msgs_send2web:
             if packet_type == 'NAV': 
@@ -122,13 +130,14 @@ class WSHandler(tornado.websocket.WebSocketHandler):
             else: 
                 # p = {packet_type:packet}
                 self.all_packets.append(packet)
-        data_lock.release()
+        self.data_lock.release()
     
 
 class DataReceiver(rover_application_base.RoverApplicationBase):
     def __init__(self, user=False):
         '''Init
         '''
+        self.ii = 0
         pass
 
     def on_reinit(self):
@@ -138,19 +147,22 @@ class DataReceiver(rover_application_base.RoverApplicationBase):
         pass
 
     def on_message(self, *args):
-        data_lock.acquire()
         packet_type = args[0]
         data = args[1]
         is_var_len_frame = args[2]
+        if packet_type == 'CNM':
+            self.ii = self.ii + 1
+            print('[{0}]:{1}'.format(datetime.datetime.now().strftime('%S'), self.ii))
 
         # user could configure which msgs can be saved to file or not in rover.json.
+        rover_log_lock.acquire()
         if packet_type in rover_log.msgs_need_to_log:
             if is_var_len_frame:
                 rover_log.log_var_len(data, packet_type)
                 # print (json.dumps(data))
             else:
                 rover_log.log(data, packet_type)
-        data_lock.release()
+        rover_log_lock.release()
 
     def on_exit(self):
         pass
@@ -186,7 +198,7 @@ def start_websocket_server():
 if __name__ == '__main__':
     '''main'''
     callback_rate = 1000
-    data_lock = threading.Lock()
+    rover_log_lock = threading.Lock() # lock of rover_log.
 
     try:
         driver = driver_ins1000.RoverDriver()
