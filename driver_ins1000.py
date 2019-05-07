@@ -18,6 +18,7 @@ import math
 import json
 import collections
 import serial
+import serial.tools.list_ports
 from message import Msg_060C_topic_0A, Msg_NTRIP
 if sys.version_info[0] > 2:
     from queue import Queue
@@ -280,8 +281,12 @@ class RoverDriver:
                 A list of the serial ports available on the system
         '''
         print('scanning ports')
+        # port_list = list(serial.tools.list_ports.comports())
+        # ports = [ p.device for p in port_list]
         if sys.platform.startswith('win'):
-            ports = ['COM%s' % (i + 1) for i in range(256)]
+            port_list = list(serial.tools.list_ports.comports())
+            ports = [ p.device for p in port_list]
+            # ports = ['COM%s' % (i + 1) for i in range(256)]
         elif sys.platform.startswith('linux') or sys.platform.startswith('cygwin'):
             # this excludes your current terminal "/dev/tty"
             ports = glob.glob('/dev/tty[A-Za-z]*')

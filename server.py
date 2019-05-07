@@ -77,13 +77,13 @@ class WSHandler(tornado.websocket.WebSocketHandler):
             message = json.loads(message)
             if message['messageType'] == 'operation' and message['data']['packetType'] == 'StartLog':
                 rover_log_lock.acquire()
-                rev = rover_log.start_user_log(message['data']['packet']['userID'],message['data']['packet']['fileName'])
+                rev = rover_log.start_user_log(message['data']['packet']['userID'],message['data']['packet']['fileName'], message['data']['packet']['accessToken'])
                 rover_log_lock.release()
                 json_msg = json.dumps({'messageType':'operationResponse','data':{'packetType':'StartLog','packet':{'returnStatus':rev}}})
                 self.write_message(json_msg)
             elif message['messageType'] == 'operation' and message['data']['packetType'] == 'StopLog':
                 rover_log_lock.acquire()
-                rev = rover_log.stop_user_log(message['data']['packet']['accessToken'], message['data']['packet']['sasToken'])
+                rev = rover_log.stop_user_log()
                 rover_log_lock.release()
                 json_msg = json.dumps({'messageType':'operationResponse','data':{'packetType':'StopLog','packet':{'returnStatus':rev}}})
                 # print(json_msg)

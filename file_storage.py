@@ -35,7 +35,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
         # azure app.
         self.user_id = ''
         self.file_name = ''
-        self.blob_user_access_token = '' 
+        self.sas_token = '' 
         self.db_user_access_token = ''
         self.host_address = self.rover_properties['userConfiguration']['hostAddress']
 
@@ -78,9 +78,17 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
     def on_exit(self):
         pass
 
-    def start_user_log(self, user_id, file_name):
+    def start_user_log(self, user_id, file_name, db_user_access_token):
+        '''
+        start log.
+        return:
+                0: OK
+                1: exception that has started logging already.
+                2: other exception.
+        '''
         self.user_id = user_id
         self.file_name = file_name
+        self.db_user_access_token = db_user_access_token
         try:
             if len(self.user_log_file_rows) > 0:
                 return 1
@@ -98,7 +106,14 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
             print(e)
             return 2
 
-    def stop_user_log(self, db_user_access_token, cloud_sas_token):
+    def stop_user_log(self):
+        '''
+        stop log.
+        return:
+                0: OK
+                1: exception that driver hasn't started logging files yet.
+                2: other exception.
+        '''
         try:
             if len(self.user_log_file_rows) == 0:
                 return 1 # driver hasn't started logging files yet.
@@ -106,13 +121,9 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
             for i, (k, v) in enumerate(self.user_log_files.items()):
                 v.close()
 
-            # start a thread to upload logs to cloud here if necessary.
-            self.db_user_access_token = db_user_access_token
-            self.blob_user_access_token = cloud_sas_token
-            if self.db_user_access_token != '' and self.blob_user_access_token != '':
-                t = threading.Thread(target=self.upload_to_azure_task, args=(self.user_log_file_names.copy(), ))
-                t.start()
-                # print("upload_to_azure_task[{0}({1})] started.".format(t.name, t.ident)) # for debug 
+            # start a thread to upload logs to azure.
+            t = threading.Thread(target=self.upload_to_azure_task, args=(self.user_log_file_names.copy(), ))
+            t.start()
 
             self.user_log_file_rows.clear()
             self.user_log_file_names.clear()
@@ -123,14 +134,15 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
             return 2
 
     def upload_to_azure_task(self, log_files_dict):
-        print(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S:') , 'Start.')
-        for i, (k, v) in enumerate(log_files_dict.items()): # k: packet type; v: log file name
-            print('upload:', v)
-            self.uploadtoAzure(k, v)
-        # self.db_user_access_token = ''
-        # self.blob_user_access_token = ''    
-        # print('upload_to_azure_task done.')
-        print(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S:') , 'Done.')
+        self.get_sas_token()
+        if self.db_user_access_token != '' and self.sas_token != '':
+            print(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S:') , 'Start.')
+            for i, (k, v) in enumerate(log_files_dict.items()): # k: packet type; v: log file name
+                print('upload:', v)
+                self.upload_to_azure(k, v)
+            # self.db_user_access_token = ''
+            # self.sas_token = ''    
+            print(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S:') , 'Done.')
 
     def log(self, data, packet_type):
         ''' Parse the data, read in from the unit, and generate a data file using
@@ -322,30 +334,28 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
                 str = ''
                 var_str = ''
 
-
-    ''' Upload CSV's to Azure container.
-    '''
-    def uploadtoAzure(self, packet_type, file_name):
+    def upload_to_azure(self, packet_type, file_name):
+        ''' Upload CSV's to Azure container.
+        '''
         f = open("data/" + file_name, "r")
         text = f.read() #.decode("utf-8")
 
         try:
-            self.azureStorage('navview', self.blob_user_access_token, 'data-1000', file_name, text)
+            self.azure_storage('navview', self.sas_token, 'data-1000', file_name, text)
         except Exception as e:
-            print('azureStorage exception:', e)
+            print('azure_storage exception:', e)
             return
             # Try again!
-            # self.azureStorage('navview', self.blob_user_access_token, 'data-1000', file_name, text)
+            # self.azure_storage('navview', self.sas_token, 'data-1000', file_name, text)
             pass
 
         ''' Trigger Database upload
         '''
-        rev = self.savetoAnsPlatform(packet_type, file_name)
+        rev = self.save_to_ans_platform(packet_type, file_name)
         if not rev:
-            print('savetoAnsPlatform failed.')
+            print('save_to_ans_platform failed.')
 
-
-    def azureStorage(self, accountName, sasToken, countainerName,fileName,text):
+    def azure_storage(self, accountName, sasToken, countainerName,fileName,text):
         if 0:
             self.append_blob_service = AppendBlobService(account_name=accountName,
                                                         sas_token=sasToken,
@@ -362,9 +372,9 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
                                                         text=text,
                                                         content_settings=ContentSettings(content_type='text/plain'))
 
-    ''' Upload CSV related information to the database.
-    '''
-    def savetoAnsPlatform(self, packet_type, file_name):
+    def save_to_ans_platform(self, packet_type, file_name):
+        ''' Upload CSV related information to the database.
+        '''
         try:
             data = {"type": 'INS', "model": 'INS1000', "fileName": file_name, "url": file_name, "userId": self.user_id, 
                     "logInfo": { "pn": '11', "sn": '', "packetType":packet_type,"insProperties":json.dumps(self.rover_properties)}}
@@ -377,11 +387,22 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
         except Exception as e:
             print('Exception when update db:', e)
 
+    def get_sas_token(self):
+        try:
+            url = "http://" + self.host_address + ":3000/token/storagesas"
+            headers = {'Content-type': 'application/json', 'Authorization': self.db_user_access_token}
+            response = requests.post(url, headers=headers)
+            rev = response.json()
+            if 'token' in rev:
+                self.sas_token = rev['token']
+            else:
+                self.sas_token = ''
+                print('Error: Get sas token failed!')
+        except Exception as e:
+            print('Exception when get_sas_token:', e)
+
     def close(self):
         pass
-
-    def test_azure(self):
-        threading.Thread(target=self.upload_to_azure_task(self.user_log_file_names.copy())).start()
 
 
 def main():
