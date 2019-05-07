@@ -10,6 +10,7 @@ import requests
 import threading
 from azure.storage.blob import AppendBlobService
 from azure.storage.blob import ContentSettings
+from azure.storage.blob import BlockBlobService
 import utility
 
 
@@ -124,9 +125,10 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
     def upload_to_azure_task(self, log_files_dict):
         print(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S:') , 'Start.')
         for i, (k, v) in enumerate(log_files_dict.items()): # k: packet type; v: log file name
+            print('upload:', v)
             self.uploadtoAzure(k, v)
-        self.db_user_access_token = ''
-        self.blob_user_access_token = ''    
+        # self.db_user_access_token = ''
+        # self.blob_user_access_token = ''    
         # print('upload_to_azure_task done.')
         print(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S:') , 'Done.')
 
@@ -344,13 +346,21 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
 
 
     def azureStorage(self, accountName, sasToken, countainerName,fileName,text):
-        self.append_blob_service = AppendBlobService(account_name=accountName,
-                                                     sas_token=sasToken,
-                                                     protocol='http')
-        self.append_blob_service.create_blob(container_name=countainerName, blob_name=fileName,
-                                             content_settings=ContentSettings(content_type='text/plain'))
-        self.append_blob_service.append_blob_from_text(countainerName, fileName, text)
-
+        if 0:
+            self.append_blob_service = AppendBlobService(account_name=accountName,
+                                                        sas_token=sasToken,
+                                                        protocol='http')
+            self.append_blob_service.create_blob(container_name=countainerName, blob_name=fileName,
+                                                content_settings=ContentSettings(content_type='text/plain'))
+            self.append_blob_service.append_blob_from_text(countainerName, fileName, text)
+        else:
+            self.block_blob_service = BlockBlobService(account_name=accountName,
+                                                        sas_token=sasToken,
+                                                        protocol='http')
+            self.block_blob_service.create_blob_from_text(  container_name= countainerName,
+                                                        blob_name= fileName,
+                                                        text=text,
+                                                        content_settings=ContentSettings(content_type='text/plain'))
 
     ''' Upload CSV related information to the database.
     '''

@@ -152,7 +152,8 @@ class DataReceiver(rover_application_base.RoverApplicationBase):
         is_var_len_frame = args[2]
         if packet_type == 'CNM':
             self.ii = self.ii + 1
-            print('[{0}]:{1}'.format(datetime.datetime.now().strftime('%S'), self.ii))
+            if self.ii % 1000 == 0:
+                print('[{0}]:{1}'.format(datetime.datetime.now().strftime('%S'), self.ii))
 
         # user could configure which msgs can be saved to file or not in rover.json.
         rover_log_lock.acquire()
