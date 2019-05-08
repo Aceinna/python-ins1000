@@ -79,22 +79,15 @@ class WSHandler(tornado.websocket.WebSocketHandler):
         try:
             message = json.loads(message)
             if message['messageType'] == 'operation' and message['data']['packetType'] == 'StartLog':
-                self.file_loger_lock.acquire()
-                rev = self.file_loger.start_user_log(message['data']['packet']['fileName'])
-                self.file_loger_lock.release()
-                json_msg = json.dumps({'messageType':'operationResponse','data':{'packetType':'StartLog','packet':{'returnStatus':rev}}})
+                status = self.start_log(message['data']['packet']['fileName'])
+                json_msg = json.dumps({'messageType':'operationResponse','data':{'packetType':'StartLog','packet':{'returnStatus':status}}})
                 self.write_message(json_msg)
                 self.file_uploader.set_user_id(message['data']['packet']['userID'])
                 self.file_uploader.set_user_access_token(message['data']['packet']['accessToken'])
             elif message['messageType'] == 'operation' and message['data']['packetType'] == 'StopLog':
-                # invoke get_log_file_names before invoking stop_user_log, as stop_user_log will remove log_file_names.
-                self.file_loger_lock.acquire()
-                log_files = self.file_loger.get_log_file_names().copy()
-                rev = self.file_loger.stop_user_log()
-                self.file_loger_lock.release()
-                json_msg = json.dumps({'messageType':'operationResponse','data':{'packetType':'StopLog','packet':{'returnStatus':rev}}})
+                status = self.stop_log()
+                json_msg = json.dumps({'messageType':'operationResponse','data':{'packetType':'StopLog','packet':{'returnStatus':status}}})
                 self.write_message(json_msg)
-                self.file_uploader.upload(log_files)
             elif message['messageType'] == 'operation' and message['data']['packetType'] == 'StartStream':
                 self.start_stream = True
                 json_msg = json.dumps({'messageType':'operationResponse','data':{'packetType':'StartStream','packet':{'returnStatus':0}}})
@@ -105,8 +98,6 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                 self.write_message(json_msg)
             else:
                 driver.handle_cmd_msg(message)
-            # if message['messageType'] != 'serverStatus' and 'data' in message:
-            #     file_storage.RoverLogApp(message['data'])
         except Exception as e:
                 print(e)
 
@@ -115,9 +106,12 @@ class WSHandler(tornado.websocket.WebSocketHandler):
             self.callback.stop()
         except Exception as e:
             pass
+
         if self in self.clients:
             self.clients.remove(self) # remove the closed web client.
             driver.remove_client(self)
+            
+        self.stop_log()
         return False
 
     def check_origin(self, origin):
@@ -137,10 +131,28 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                 self.all_packets.append(packet)
         self.data_lock.release()
         if ori_packet:
-            self.file_loger_lock.acquire()
-            self.file_loger.update(ori_packet, packet_type, is_var_len_frame)
-            self.file_loger_lock.release()
+            self.update_log(ori_packet, packet_type, is_var_len_frame)
 
+    def start_log(self, file_name):
+        self.file_loger_lock.acquire()
+        status = self.file_loger.start_user_log(file_name)
+        self.file_loger_lock.release()
+        return status
+
+    def stop_log(self):
+        self.file_loger_lock.acquire()
+        # invoke get_log_file_names before invoking stop_user_log as stop_user_log will remove log_file_names.
+        log_files = self.file_loger.get_log_file_names()
+        status = self.file_loger.stop_user_log()
+        if status == 0:
+            self.file_uploader.upload(log_files)
+        self.file_loger_lock.release()
+        return status
+
+    def update_log(self, packet, packet_type, is_var_len_frame):
+        self.file_loger_lock.acquire()
+        self.file_loger.update(packet, packet_type, is_var_len_frame)
+        self.file_loger_lock.release()
 
 class DataReceiver(rover_application_base.RoverApplicationBase):
     def __init__(self, user=False):

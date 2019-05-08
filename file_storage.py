@@ -115,7 +115,7 @@ class FileLoger():
                 self.log(packet, packet_type)
 
     def get_log_file_names(self):
-        return self.log_file_names
+        return self.log_file_names.copy()
 
     def log(self, data, packet_type):
         ''' Parse the data, read in from the unit, and generate a data file using
