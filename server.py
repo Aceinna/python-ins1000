@@ -95,7 +95,7 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                 self.write_message(json_msg)
             elif message['messageType'] == 'operation' and message['data']['packetType'] == 'StopStream':
                 self.start_stream = False
-                json_msg = json.dumps({'messageType':'operationResponse','data':{'packetType':'StartStream','packet':{'returnStatus':0}}})
+                json_msg = json.dumps({'messageType':'operationResponse','data':{'packetType':'StopStream','packet':{'returnStatus':0}}})
                 self.write_message(json_msg)
             elif message['messageType'] == 'query' and message['data']['packetType'] == 'DeviceStatus':
                 status = 0 if driver.connection_status == 1 else 1

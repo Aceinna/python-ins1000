@@ -324,58 +324,59 @@ class RoverDriver:
         topic_tp = frame[PAYLOAD_TOPIC_IDX]
 
         # UserConfiguration. ref msg8.4, rover report the 'IMU rotation matrix' and 'GNSS antenna lever arm' messages.
-        if sub_id == 0X0C and topic_tp == 0X0A: 
-            msg_060C_topic_0A = Msg_060C_topic_0A(frame)
+        if sub_id == 0X0C:
+            if topic_tp == 0X0A: 
+                msg_060C_topic_0A = Msg_060C_topic_0A(frame)
 
-            # update GNSS lever-arm by internal lever-arm.
-            if 'Internal Lever-arm' in self.msgs:
-                msgs_internal_lever_arm = self.msgs['Internal Lever-arm']
-                if msgs_internal_lever_arm['Validity']:
-                    internal_lever_arm = msgs_internal_lever_arm['Internal lever-arm vector']
-                    msg_060C_topic_0A.update_GNSS_lever_arm_by_internal_lever_arm(internal_lever_arm)
-            self.msgs['Msg_060C_topic_0A'] = msg_060C_topic_0A
+                # update GNSS lever-arm by internal lever-arm.
+                if 'Internal Lever-arm' in self.msgs:
+                    msgs_internal_lever_arm = self.msgs['Internal Lever-arm']
+                    if msgs_internal_lever_arm['Validity']:
+                        internal_lever_arm = msgs_internal_lever_arm['Internal lever-arm vector']
+                        msg_060C_topic_0A.update_GNSS_lever_arm_by_internal_lever_arm(internal_lever_arm)
+                self.msgs['Msg_060C_topic_0A'] = msg_060C_topic_0A
 
-            # pack GNSS lever-arm json message.
-            user_configuration_json_msg = msg_060C_topic_0A.pack_user_configuration_json_msg()
-            data = { 'messageType' : 'queryResponse', 'data' : {'packetType' : 'UserConfiguration', 'packet' : user_configuration_json_msg }}
-            # print ("userConfiguration:", json.dumps(data))
+                # pack GNSS lever-arm json message.
+                user_configuration_json_msg = msg_060C_topic_0A.pack_user_configuration_json_msg()
+                data = { 'messageType' : 'queryResponse', 'data' : {'packetType' : 'UserConfiguration', 'packet' : user_configuration_json_msg }}
+                # print ("userConfiguration:", json.dumps(data))
 
-            cmd_type = self.get_web_cmds('queryUserConfiguration')
-            if cmd_type: # send UserConfiguration to web client if web client has sent query cmd to driver.
-                # if self.app:
-                #     self.app.on_message("UserConfiguration", user_configuration_json_msg, True)
+                cmd_type = self.get_web_cmds('queryUserConfiguration')
+                if cmd_type: # send UserConfiguration to web client if web client has sent query cmd to driver.
+                    # if self.app:
+                    #     self.app.on_message("UserConfiguration", user_configuration_json_msg, True)
+                    self.web_clients_lock.acquire()
+                    for client in self.web_clients:
+                        client.on_driver_message(data)
+                    self.web_clients_lock.release()
+            elif topic_tp == 0X04: # handle 'Internal Lever-arm' message.
+                validity = payload[1] # Validity 0: Invalid, 1: Valid
+                if validity:
+                    v = struct.pack('24B', *payload[2:2+24]) # double[3]
+                    internal_lever_arm = list(struct.unpack('<3d', v))
+                    data = collections.OrderedDict()
+                    data['Topic'] = 0X04
+                    data['Validity'] = validity
+                    data['Internal lever-arm vector'] = internal_lever_arm
+                    self.msgs['Internal Lever-arm'] = data
+                    # print("internal_lever_arm:", data)
+                    if 'Msg_060C_topic_0A' in self.msgs:
+                        msg_060C_topic_0A = self.msgs['Msg_060C_topic_0A']
+                        # center = housing mark + internal
+                        msg_060C_topic_0A.update_GNSS_lever_arm_by_internal_lever_arm(internal_lever_arm)
+            elif topic_tp == 0X0C: # Firmware version
+                len_fmt = '{0}B'.format(payload_len-1)
+                b = struct.pack(len_fmt, *payload[1:])
+                data = collections.OrderedDict()
+                data['firmwareVersion'] = b.decode() # bytes to string
+                if self.app:
+                    self.app.on_message( "FirmwareVersion", data, False)
+
+                data = { 'messageType' : 'queryResponse', 'data' : {'packetType' : 'FirmwareVersion', 'packet' : data }}
                 self.web_clients_lock.acquire()
                 for client in self.web_clients:
                     client.on_driver_message(data)
                 self.web_clients_lock.release()
-        elif sub_id == 0X0C and topic_tp == 0X04: # handle 'Internal Lever-arm' message.
-            validity = payload[1] # Validity 0: Invalid, 1: Valid
-            if validity:
-                v = struct.pack('24B', *payload[2:2+24]) # double[3]
-                internal_lever_arm = list(struct.unpack('<3d', v))
-                data = collections.OrderedDict()
-                data['Topic'] = 0X04
-                data['Validity'] = validity
-                data['Internal lever-arm vector'] = internal_lever_arm
-                self.msgs['Internal Lever-arm'] = data
-                # print("internal_lever_arm:", data)
-                if 'Msg_060C_topic_0A' in self.msgs:
-                    msg_060C_topic_0A = self.msgs['Msg_060C_topic_0A']
-                    # center = housing mark + internal
-                    msg_060C_topic_0A.update_GNSS_lever_arm_by_internal_lever_arm(internal_lever_arm)
-        elif sub_id == 0X0C and topic_tp == 0X0C: # Firmware version
-            len_fmt = '{0}B'.format(payload_len-1)
-            b = struct.pack(len_fmt, *payload[1:])
-            data = collections.OrderedDict()
-            data['firmwareVersion'] = b.decode() # bytes to string
-            if self.app:
-                self.app.on_message( "FirmwareVersion", data, False)
-
-            data = { 'messageType' : 'queryResponse', 'data' : {'packetType' : 'FirmwareVersion', 'packet' : data }}
-            self.web_clients_lock.acquire()
-            for client in self.web_clients:
-                client.on_driver_message(data)
-            self.web_clients_lock.release()
         elif sub_id == 0X06: # ref 8.1: System Response
             msg_type_request = payload[0]
             msg_sub_id_request = payload[1]
@@ -399,33 +400,37 @@ class RoverDriver:
                     for client in self.web_clients:
                         client.on_driver_message(data)
                     self.web_clients_lock.release()
-            elif msg_type_request == 0X06 and msg_sub_id_request == 0X0A and topic_tp == 0X01: 
-                if response == 1: #ACK
-                    pass
-                elif response == 2: #NACK
-                    pass
-            #Internal Lever-arm Query
-            # elif msg_type_request == 0X06 and msg_sub_id_request == 0X0B and topic_tp == 0X04: 
-            #     if response == 1: #ACK
-            #         pass
-            #     elif response == 2: #NACK
-            #         self.query_rover_cfg_setup()
             else:
                 print('Receive system response, msg_type:{0}, msg_sub_id:{1}, topic:{2}'.format(msg_type_request, msg_sub_id_request, topic_tp))
-        elif sub_id == 0X0A and topic_tp == 0X03 and payload_len == 155: # NTIP query response.
-            msg_NTRIP = Msg_NTRIP()
-            msg_NTRIP.unpack_NTRIP_msg(frame)
-            data = msg_NTRIP.pack_NTRIP_configuration_json_msg()
+        elif sub_id == 0X0A:
+            if topic_tp == 0X03 and payload_len == 155: # NTIP query response.
+                msg_NTRIP = Msg_NTRIP()
+                msg_NTRIP.unpack_NTRIP_msg(frame)
+                data = msg_NTRIP.pack_NTRIP_configuration_json_msg()
 
-            data = { 'messageType' : 'queryResponse', 'data' : {'packetType' : 'NTRIPConfiguration', 'packet' : data }}
-            # print ('NTRIPConfiguration:', json.dumps(data))
-            
-            cmd_type = self.get_web_cmds('queryNTRIPConfiguration')
-            if cmd_type: # send UserConfiguration to web client if web client has sent query cmd to driver.
-                self.web_clients_lock.acquire()
-                for client in self.web_clients:
-                    client.on_driver_message(data)
-                self.web_clients_lock.release()
+                data = { 'messageType' : 'queryResponse', 'data' : {'packetType' : 'NTRIPConfiguration', 'packet' : data }}
+                # print ('NTRIPConfiguration:', json.dumps(data))
+                
+                cmd_type = self.get_web_cmds('queryNTRIPConfiguration')
+                if cmd_type: # send UserConfiguration to web client if web client has sent query cmd to driver.
+                    self.web_clients_lock.acquire()
+                    for client in self.web_clients:
+                        client.on_driver_message(data)
+                    self.web_clients_lock.release()
+            elif topic_tp == 0X04 or topic_tp == 0X05: 
+                #  ACK of setting NTIP: AF 20 06 0A 01 00 04 04 04
+                # NACK of setting NTIP: AF 20 06 0A 01 00 05 05 05
+                status = 0 if topic_tp == 0X04 else 1
+                data = { 'messageType' : 'setResponse', 'data' : {'packetType' : 'NTRIPConfiguration', 'packet' : {'returnStatus':status} }}
+                print ('setNTRIPConfiguration:', json.dumps(data))
+                cmd_type = self.get_web_cmds('setNTRIPConfiguration')
+                if cmd_type:
+                    self.web_clients_lock.acquire()
+                    for client in self.web_clients:
+                        client.on_driver_message(data)
+                    self.web_clients_lock.release()
+            else:
+                pass
         else:
             pass
 
