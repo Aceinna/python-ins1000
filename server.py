@@ -178,7 +178,7 @@ class DataReceiver(rover_application_base.RoverApplicationBase):
         packet = args[1]
         is_var_len_frame = args[2]
         self.file_loger.update(packet, packet_type, is_var_len_frame)
-
+        # print('[{0}]:{1}'.format(datetime.datetime.now().strftime('%S'), packet_type))
         if packet_type == 'NAV':
             self.ii = self.ii + 1
             if self.ii % 1000 == 0:
