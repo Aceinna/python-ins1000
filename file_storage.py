@@ -16,69 +16,46 @@ import utility
 
 class RoverLogApp(rover_application_base.RoverApplicationBase):
     def __init__(self, user=False):
-        '''Initialize and create a CSV file
+        '''Initialize
         '''
-        start_time = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-        self.rover_properties = utility.load_configuration(os.path.join('setting', 'rover.json'))
-        if not self.rover_properties:
-            os._exit(1)
-        if not os.path.exists('data/'):
-            os.mkdir('data/')
-        self.output_packets = self.rover_properties['userMessages']['outputPackets']
-        self.log_file_rows = {}
-        self.log_file_names = {}
-        self.log_files = {}
-        self.msgs_need_to_log = []
-        self.user_log_file_rows = {}
-        self.user_log_file_names = {}
-        self.user_log_files = {}
-        # azure app.
-        self.user_id = ''
-        self.file_name = ''
-        self.sas_token = '' 
-        self.db_user_access_token = ''
-        self.host_address = self.rover_properties['userConfiguration']['hostAddress']
-
-        for packet in self.output_packets:
-            if 1 == packet['save2file']:
-                self.msgs_need_to_log.append(packet['name'])
-            else:
-                continue
-            self.log_file_rows[packet['name']] = 0
-            self.log_file_names[packet['name']] = packet['name'] +'-' + start_time + '.csv'
-            self.log_files[packet['name']] = open('data/' + self.log_file_names[packet['name']], 'w')
+        self.file_loger = FileLoger()
+        self.file_loger.start_user_log()
 
     def on_reinit(self):
         print ("RoverLogApp.on_reinit()")
-        pass
-        # Is it necessary to create a new file to log when replug serial connector?
-
-        # start_time = datetime.datetime.now().strftime('%Y%m%d_%H_%M_%S')
-        # try:
-        #     for packet in self.output_packets:
-        #         self.log_file_rows[packet['name']] = 0
-        #         self.log_file_names[packet['name']] = packet['name'] +'-' + start_time + '.csv'
-        #         self.log_files[packet['name']] = open('data/' + self.log_file_names[packet['name']], 'w')# just log Compact Navigation Message
-        # except:
-        #     pass
 
     def on_find_active_rover(self):
         print ("RoverLogApp.on_find_active_rover()")
 
     def on_message(self, *args):
         packet_type = args[0]
-        self.data = args[1]
+        packet = args[1]
         is_var_len_frame = args[2]
-        if packet_type in self.msgs_need_to_log:
-            if is_var_len_frame:
-                self.log_var_len(self.data, packet_type)
-            else:
-                self.log(self.data, packet_type)
+        self.file_loger.update(packet, packet_type, is_var_len_frame)
 
     def on_exit(self):
+        self.file_loger.stop_user_log()
         pass
 
-    def start_user_log(self, user_id, file_name, db_user_access_token):
+
+class FileLoger():
+    def __init__(self):
+        '''Initialize and create a CSV file
+        '''
+        start_time = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        rover_properties = utility.load_configuration(os.path.join('setting', 'rover.json'))
+        if not rover_properties:
+            os._exit(1)
+        if not os.path.exists('data/'):
+            os.mkdir('data/')
+        self.output_packets = rover_properties['userMessages']['outputPackets']
+        self.log_file_rows = {}
+        self.log_file_names = {}
+        self.log_files = {}
+        self.user_file_name = '' # the prefix of log file name.
+        self.msgs_need_to_log = []
+
+    def start_user_log(self, file_name=''):
         '''
         start log.
         return:
@@ -86,24 +63,24 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
                 1: exception that has started logging already.
                 2: other exception.
         '''
-        self.user_id = user_id
-        self.file_name = file_name
-        self.db_user_access_token = db_user_access_token
         try:
-            if len(self.user_log_file_rows) > 0:
-                return 1
+            if len(self.log_file_rows) > 0:
+                return 1 # has started logging already.
 
-            if not isinstance(self.user_id, str):
-                self.user_id = str(self.user_id)
+            self.user_file_name = file_name
             start_time = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
             for packet in self.output_packets:
-                if packet['name'] in self.msgs_need_to_log:
-                    self.user_log_file_rows[packet['name']] = 0
-                    self.user_log_file_names[packet['name']] = self.file_name + '_' + packet['name'] +'-' + start_time + '.csv'
-                    self.user_log_files[packet['name']] = open('data/' + self.user_log_file_names[packet['name']], 'w')
+                if 1 == packet['save2file']:
+                    self.msgs_need_to_log.append(packet['name'])
+                    self.log_file_rows[packet['name']] = 0
+                    if self.user_file_name == '':
+                        self.log_file_names[packet['name']] = packet['name'] +'-' + start_time + '.csv'
+                    else:
+                        self.log_file_names[packet['name']] = self.user_file_name + '_' + packet['name'] +'-' + start_time + '.csv'
+                    self.log_files[packet['name']] = open('data/' + self.log_file_names[packet['name']], 'w')        
             return 0
         except Exception as e:
-            print(e)
+            print('Exception! File:[{0}], Line:[{1}]. Exception:{2}'.format(__file__, sys._getframe().f_lineno, e))
             return 2
 
     def stop_user_log(self):
@@ -115,34 +92,30 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
                 2: other exception.
         '''
         try:
-            if len(self.user_log_file_rows) == 0:
+            if len(self.log_file_rows) == 0:
                 return 1 # driver hasn't started logging files yet.
-
-            for i, (k, v) in enumerate(self.user_log_files.items()):
+            for i, (k, v) in enumerate(self.log_files.items()):
                 v.close()
-
-            # start a thread to upload logs to azure.
-            t = threading.Thread(target=self.upload_to_azure_task, args=(self.user_log_file_names.copy(), ))
-            t.start()
-
-            self.user_log_file_rows.clear()
-            self.user_log_file_names.clear()
-            self.user_log_files.clear()
+            self.log_file_rows.clear()
+            self.log_file_names.clear()
+            self.log_files.clear()
             return 0
         except Exception as e:
             print(e)
             return 2
 
-    def upload_to_azure_task(self, log_files_dict):
-        self.get_sas_token()
-        if self.db_user_access_token != '' and self.sas_token != '':
-            print(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S:') , 'Start.')
-            for i, (k, v) in enumerate(log_files_dict.items()): # k: packet type; v: log file name
-                print('upload:', v)
-                self.upload_to_azure(k, v)
-            # self.db_user_access_token = ''
-            # self.sas_token = ''    
-            print(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S:') , 'Done.')
+    def update(self, packet, packet_type, is_var_len_frame):
+        if len(self.log_file_rows) == 0: #if hasn't started logging.
+            return
+
+        if packet_type in self.msgs_need_to_log:
+            if is_var_len_frame:
+                self.log_var_len(packet, packet_type)
+            else:
+                self.log(packet, packet_type)
+
+    def get_log_file_names(self):
+        return self.log_file_names
 
     def log(self, data, packet_type):
         ''' Parse the data, read in from the unit, and generate a data file using
@@ -153,7 +126,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
 
         '''Write row of CSV file based on data received.  Uses dictionary keys for column titles
         '''
-        if self.log_file_rows[packet_type] == 0 or (len(self.user_log_file_rows) > 0 and self.user_log_file_rows[packet_type] == 0):
+        if self.log_file_rows[packet_type] == 0:
             # Loop through each item in the data dictionary and create a header from the json
             #   properties that correspond to the items in the dictionary
             labels = ''
@@ -177,8 +150,6 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
             header = ''
 
         self.log_file_rows[packet_type] += 1
-        if len(self.user_log_file_rows) > 0:
-            self.user_log_file_rows[packet_type] += 1
 
         # Loop through the items in the data dictionary and append to an output string
         #   (with precision based on the data type defined in the json properties file)
@@ -215,13 +186,6 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
             self.log_files[packet_type].write(str)
         self.log_files[packet_type].flush()
 
-        if len(self.user_log_file_rows) > 0:
-            if self.user_log_file_rows[packet_type] == 1:
-                self.user_log_files[packet_type].write(header+str)
-            else:
-                self.user_log_files[packet_type].write(str)
-            self.user_log_files[packet_type].flush()
-
     def log_var_len(self, data, packet_type):
         ''' Parse the data, read in from the unit, and generate a data file using
             the json properties file to create a header and specify the precision
@@ -231,7 +195,7 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
 
         '''Write row of CSV file based on data received.  Uses dictionary keys for column titles
         '''
-        if self.log_file_rows[packet_type] == 0 or (len(self.user_log_file_rows) > 0 and self.user_log_file_rows[packet_type] == 0):
+        if self.log_file_rows[packet_type] == 0:
 
             # Loop through each item in the data dictionary and create a header from the json
             #   properties that correspond to the items in the dictionary
@@ -250,8 +214,6 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
             header = ''
 
         self.log_file_rows[packet_type] += 1
-        if len(self.user_log_file_rows) > 0:
-            self.user_log_file_rows[packet_type] += 1
 
         # Loop through the items in the data dictionary and append to an output string
         #   (with precision based on the data type defined in the json properties file)
@@ -323,16 +285,59 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
                     self.log_files[packet_type].write(str)
                 self.log_files[packet_type].flush()
 
-                if len(self.user_log_file_rows) > 0:
-                    if self.user_log_file_rows[packet_type] == 1:
-                        self.user_log_files[packet_type].write(header+str)
-                    else:
-                        self.user_log_files[packet_type].write(str)
-                    self.user_log_files[packet_type].flush()
-
                 header = ''
                 str = ''
                 var_str = ''
+                
+
+class FileUploader():
+    def __init__(self):
+        # azure app.
+        self.user_id = ''
+        self.file_name = ''
+        self.sas_token = '' 
+        self.db_user_access_token = ''
+        self.rover_properties = utility.load_configuration(os.path.join('setting', 'rover.json'))
+        if not self.rover_properties:
+            os._exit(1)
+        self.host_address = self.rover_properties['userConfiguration']['hostAddress']
+
+    def set_user_id(self, user_id):
+        self.user_id = user_id
+        if not isinstance(self.user_id, str):
+            self.user_id = str(self.user_id)
+
+    def set_user_access_token(self, access_token):
+        self.db_user_access_token = access_token
+
+    def upload(self, log_file_names):
+        t = threading.Thread(target=self.upload_to_azure_task, args=(log_file_names, ))
+        t.start()
+
+    def upload_to_azure_task(self, log_files_dict):
+        self.get_sas_token()
+        if self.db_user_access_token != '' and self.sas_token != '':
+            print(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S:') , 'Start.')
+            for i, (k, v) in enumerate(log_files_dict.items()): # k: packet type; v: log file name
+                print('upload:', v)
+                self.upload_to_azure(k, v)
+            # self.db_user_access_token = ''
+            # self.sas_token = ''    
+            print(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S:') , 'Done.')
+
+    def get_sas_token(self):
+        try:
+            url = "http://" + self.host_address + ":3000/token/storagesas"
+            headers = {'Content-type': 'application/json', 'Authorization': self.db_user_access_token}
+            response = requests.post(url, headers=headers)
+            rev = response.json()
+            if 'token' in rev:
+                self.sas_token = rev['token']
+            else:
+                self.sas_token = ''
+                print('Error: Get sas token failed!')
+        except Exception as e:
+            print('Exception when get_sas_token:', e)
 
     def upload_to_azure(self, packet_type, file_name):
         ''' Upload CSV's to Azure container.
@@ -387,24 +392,6 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
         except Exception as e:
             print('Exception when update db:', e)
 
-    def get_sas_token(self):
-        try:
-            url = "http://" + self.host_address + ":3000/token/storagesas"
-            headers = {'Content-type': 'application/json', 'Authorization': self.db_user_access_token}
-            response = requests.post(url, headers=headers)
-            rev = response.json()
-            if 'token' in rev:
-                self.sas_token = rev['token']
-            else:
-                self.sas_token = ''
-                print('Error: Get sas token failed!')
-        except Exception as e:
-            print('Exception when get_sas_token:', e)
-
-    def close(self):
-        pass
-
-
 def main():
     '''main'''
     driver = driver_ins1000.RoverDriver()
@@ -424,3 +411,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+    # os._exit(1)

@@ -11,7 +11,7 @@ import tornado.httpserver
 import tornado.web
 import rover_application_base
 import driver_ins1000
-import file_storage
+from file_storage import RoverLogApp, FileLoger, FileUploader
 import utility
 
 
@@ -26,8 +26,11 @@ class WSHandler(tornado.websocket.WebSocketHandler):
         self.msgs_send2web = []
         self.data_lock = threading.Lock() # lock of all_packets and msgs_send2web.
         self.start_stream = False
+        self.file_uploader = FileUploader()
+        self.file_loger = FileLoger()
+        self.file_loger_lock = threading.Lock() # lock of file_loger and file_uploader.
         self.ii = 0
-        
+
         rover_properties = utility.load_configuration(os.path.join('setting', 'rover.json'))
         if not rover_properties:
             os._exit(1)
@@ -76,19 +79,22 @@ class WSHandler(tornado.websocket.WebSocketHandler):
         try:
             message = json.loads(message)
             if message['messageType'] == 'operation' and message['data']['packetType'] == 'StartLog':
-                rover_log_lock.acquire()
-                rev = rover_log.start_user_log(message['data']['packet']['userID'],message['data']['packet']['fileName'], message['data']['packet']['accessToken'])
-                rover_log_lock.release()
+                self.file_loger_lock.acquire()
+                rev = self.file_loger.start_user_log(message['data']['packet']['fileName'])
+                self.file_loger_lock.release()
                 json_msg = json.dumps({'messageType':'operationResponse','data':{'packetType':'StartLog','packet':{'returnStatus':rev}}})
                 self.write_message(json_msg)
+                self.file_uploader.set_user_id(message['data']['packet']['userID'])
+                self.file_uploader.set_user_access_token(message['data']['packet']['accessToken'])
             elif message['messageType'] == 'operation' and message['data']['packetType'] == 'StopLog':
-                rover_log_lock.acquire()
-                rev = rover_log.stop_user_log()
-                rover_log_lock.release()
+                # invoke get_log_file_names before invoking stop_user_log, as stop_user_log will remove log_file_names.
+                self.file_loger_lock.acquire()
+                log_files = self.file_loger.get_log_file_names().copy()
+                rev = self.file_loger.stop_user_log()
+                self.file_loger_lock.release()
                 json_msg = json.dumps({'messageType':'operationResponse','data':{'packetType':'StopLog','packet':{'returnStatus':rev}}})
-                # print(json_msg)
-                # print('************') 
                 self.write_message(json_msg)
+                self.file_uploader.upload(log_files)
             elif message['messageType'] == 'operation' and message['data']['packetType'] == 'StartStream':
                 self.start_stream = True
                 json_msg = json.dumps({'messageType':'operationResponse','data':{'packetType':'StartStream','packet':{'returnStatus':0}}})
@@ -117,13 +123,12 @@ class WSHandler(tornado.websocket.WebSocketHandler):
     def check_origin(self, origin):
         return True
 
-    def on_driver_message(self, packet):
-        self.data_lock.acquire()
+    def on_driver_message(self, packet, ori_packet=None, is_var_len_frame=False):
         packet_type = packet['data']['packetType']
         # if packet_type == 'CNM':
         #     self.ii = self.ii + 1
         #     print('[{0}]:{1}'.format(datetime.datetime.now().strftime('%S'), self.ii))
-
+        self.data_lock.acquire()
         if packet_type in self.msgs_send2web:
             if packet_type == 'NAV': 
                 self.newest_packets[packet_type] = packet
@@ -131,12 +136,18 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                 # p = {packet_type:packet}
                 self.all_packets.append(packet)
         self.data_lock.release()
-    
+        if ori_packet:
+            self.file_loger_lock.acquire()
+            self.file_loger.update(ori_packet, packet_type, is_var_len_frame)
+            self.file_loger_lock.release()
+
 
 class DataReceiver(rover_application_base.RoverApplicationBase):
     def __init__(self, user=False):
         '''Init
         '''
+        self.file_loger = FileLoger()
+        self.file_loger.start_user_log()
         self.ii = 0
         pass
 
@@ -148,24 +159,17 @@ class DataReceiver(rover_application_base.RoverApplicationBase):
 
     def on_message(self, *args):
         packet_type = args[0]
-        data = args[1]
+        packet = args[1]
         is_var_len_frame = args[2]
-        if packet_type == 'CNM':
+        self.file_loger.update(packet, packet_type, is_var_len_frame)
+
+        if packet_type == 'NAV':
             self.ii = self.ii + 1
             if self.ii % 1000 == 0:
                 print('[{0}]:{1}'.format(datetime.datetime.now().strftime('%S'), self.ii))
 
-        # user could configure which msgs can be saved to file or not in rover.json.
-        rover_log_lock.acquire()
-        if packet_type in rover_log.msgs_need_to_log:
-            if is_var_len_frame:
-                rover_log.log_var_len(data, packet_type)
-                # print (json.dumps(data))
-            else:
-                rover_log.log(data, packet_type)
-        rover_log_lock.release()
-
     def on_exit(self):
+        self.file_loger.stop_user_log()
         pass
 
 def driver_thread(driver):
@@ -199,14 +203,12 @@ def start_websocket_server():
 if __name__ == '__main__':
     '''main'''
     callback_rate = 1000
-    rover_log_lock = threading.Lock() # lock of rover_log.
 
     try:
         driver = driver_ins1000.RoverDriver()
         data_receiver = DataReceiver()
         driver.set_app(data_receiver)
         threading.Thread(target=driver_thread, args=(driver,)).start()
-        rover_log = file_storage.RoverLogApp()  # log data.
         threading.Thread(target=start_websocket_server, args=()).start()
         while (True):
             time.sleep(1)

@@ -411,12 +411,6 @@ class RoverDriver:
             if data:
                 if self.app:
                     self.app.on_message(output_packet['name'], data, is_var_len_frame)
-
-                # self.web_clients_lock.acquire()
-                # for client in self.web_clients:
-                #     client.on_driver_message(output_packet['name'], data, is_var_len_frame)
-                # self.web_clients_lock.release()
-
                 self.packet_handler(output_packet['name'], data, is_var_len_frame)
         elif header.startswith('AF2006'): # some messages start with 'AF2006' are different decoding rule with message list in rover.json, so need to handle specially.
             self.msg_typeid_06_handler(frame)
@@ -786,7 +780,7 @@ class RoverDriver:
         data = { 'messageType' : msg_type, 'data' : {'packetType' : packet_type, 'packet' : packet }}
         self.web_clients_lock.acquire()
         for client in self.web_clients:
-            client.on_driver_message(data)
+            client.on_driver_message(data, packet, is_var_len)
         self.web_clients_lock.release()
 
         '''
@@ -839,7 +833,7 @@ class RoverDriver:
             data = { 'messageType' : 'event', 'data' : {'packetType' : TP_NAV, 'packet' : nav }}
             self.web_clients_lock.acquire()
             for client in self.web_clients:
-                client.on_driver_message(data)
+                client.on_driver_message(data, nav, False)
             self.web_clients_lock.release()
             # print (json.dumps(nav))
             # print("***************")        
@@ -853,10 +847,10 @@ class RoverDriver:
             if self.app:
                 self.app.on_message(TP_SS, data, False)
 
-            data = { 'messageType' : 'event', 'data' : {'packetType' : TP_SS, 'packet' : data }}
+            web_data = { 'messageType' : 'event', 'data' : {'packetType' : TP_SS, 'packet' : data }}
             self.web_clients_lock.acquire()
             for client in self.web_clients:
-                client.on_driver_message(data)
+                client.on_driver_message(web_data, data, False)
             self.web_clients_lock.release()
         elif TP_NCA == packet_type:
             data = collections.OrderedDict()
@@ -868,10 +862,10 @@ class RoverDriver:
             if self.app:
                 self.app.on_message(TP_SS, data, False)
 
-            data = { 'messageType' : 'event', 'data' : {'packetType' : TP_SS, 'packet' : data }}
+            web_data = { 'messageType' : 'event', 'data' : {'packetType' : TP_SS, 'packet' : data }}
             self.web_clients_lock.acquire()
             for client in self.web_clients:
-                client.on_driver_message(data)
+                client.on_driver_message(web_data, data, False)
             self.web_clients_lock.release()
         else:
             pass
