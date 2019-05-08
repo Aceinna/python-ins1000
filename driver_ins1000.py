@@ -46,7 +46,7 @@ class RoverDriver:
         self.app = None
         self.msgs = {}
         self.cmds = {}
-        self.connection_status = 0 # 0: unconnected 1:connected.
+        self.connection_status = 0 # status of connection with device. 0: unconnected 1:connected.
         self.cmds['queryProductId'] = b'\xAF\x20\x06\x0B\x01\x00\x01\x01\x01'
         self.cmds['queryEngineVersion'] = b'\xAF\x20\x06\x0B\x01\x00\x02\x02\x02'
         self.cmds['queryFirmwareVersion'] = b'\xAF\x20\x06\x0B\x01\x00\x0C\x0C\x0C'
@@ -239,18 +239,31 @@ class RoverDriver:
         for func in funcs:
             t = threading.Thread(target=func, args=())
             t.start()
-            print("Thread[{0}({1})] started.".format(t.name, t.ident))
+            print("Thread[{0}({1})] start at:[{2}].".format(t.name, t.ident, datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
             self.threads.append(t)
 
         self.query_rover_cfg_setup()
         self.connection_status = 1
-        
+
+        data = { 'messageType' : 'queryResponse', 'data' : {'packetType' : 'DeviceStatus', 'packet' : {'returnStatus' : 0} }}
+        self.web_clients_lock.acquire()
+        for client in self.web_clients:
+            client.on_driver_message(data)
+        self.web_clients_lock.release()
+
         if self.handle_KeyboardInterrupt():
             return False
 
         for t in self.threads:
             t.join()
-            print("Thread[{0}({1})] stoped.".format(t.name, t.ident))
+            print("Thread[{0}({1})] stop at:[{2}].".format(t.name, t.ident, datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+        
+        self.connection_status = 0
+        data = { 'messageType' : 'queryResponse', 'data' : {'packetType' : 'DeviceStatus', 'packet' : {'returnStatus' : 1} }}
+        self.web_clients_lock.acquire()
+        for client in self.web_clients:
+            client.on_driver_message(data)
+        self.web_clients_lock.release()
 
         self.close_serial_port()
         return True

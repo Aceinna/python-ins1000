@@ -72,10 +72,11 @@ class WSHandler(tornado.websocket.WebSocketHandler):
         self.data_lock.release()
 
     def on_message(self, message):
-        # if driver.connection_status == 0:
-        #     json_msg = json.dumps({ 'messageType' : 'event',  'data' : {'packetType' : 'ConnectionStatus', 'packet' : {'ConnectionStatus' : 0} }})
-        #     self.write_message(json_msg)
-        #     return
+        #driver report DeviceStatus msg if driver hasn't connected with device.
+        if driver.connection_status == 0:
+            json_msg = json.dumps({ 'messageType' : 'queryResponse', 'data' : {'packetType' : 'DeviceStatus', 'packet' : {'returnStatus' : 1} }})
+            self.write_message(json_msg)
+            # return
         try:
             message = json.loads(message)
             if message['messageType'] == 'operation' and message['data']['packetType'] == 'StartLog':
@@ -96,6 +97,10 @@ class WSHandler(tornado.websocket.WebSocketHandler):
                 self.start_stream = False
                 json_msg = json.dumps({'messageType':'operationResponse','data':{'packetType':'StartStream','packet':{'returnStatus':0}}})
                 self.write_message(json_msg)
+            elif message['messageType'] == 'query' and message['data']['packetType'] == 'DeviceStatus':
+                status = 0 if driver.connection_status == 1 else 1
+                json_msg = json.dumps({ 'messageType' : 'queryResponse',  'data' : {'packetType' : 'DeviceStatus', 'packet' : {'returnStatus' : status} }})
+                self.write_message(json_msg)
             else:
                 driver.handle_cmd_msg(message)
         except Exception as e:
@@ -110,7 +115,7 @@ class WSHandler(tornado.websocket.WebSocketHandler):
         if self in self.clients:
             self.clients.remove(self) # remove the closed web client.
             driver.remove_client(self)
-            
+
         self.stop_log()
         return False
 
@@ -126,8 +131,7 @@ class WSHandler(tornado.websocket.WebSocketHandler):
         if packet_type in self.msgs_send2web:
             if packet_type == 'NAV': 
                 self.newest_packets[packet_type] = packet
-            else: 
-                # p = {packet_type:packet}
+            else:
                 self.all_packets.append(packet)
         self.data_lock.release()
         if ori_packet:

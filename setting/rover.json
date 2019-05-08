@@ -636,6 +636,13 @@
         "description": "System response for NTRIP Client Configuration",
         "save2file": 0,
         "send2web": 1
+      },
+      {
+        "name": "DeviceStatus",
+        "header": "NONE",
+        "description": "Report the connection status between driver and device.",
+        "save2file": 0,
+        "send2web": 1
       }
     ]
   }
