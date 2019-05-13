@@ -20,18 +20,24 @@ class RoverLogApp(rover_application_base.RoverApplicationBase):
         '''
         self.file_loger = FileLoger()
         self.file_loger.start_user_log()
+        self.ii = 0
 
     def on_reinit(self):
-        print ("RoverLogApp.on_reinit()")
+        pass
 
     def on_find_active_rover(self):
-        print ("RoverLogApp.on_find_active_rover()")
+        pass
 
     def on_message(self, *args):
         packet_type = args[0]
         packet = args[1]
         is_var_len_frame = args[2]
         self.file_loger.update(packet, packet_type, is_var_len_frame)
+        # print('[{0}]:{1}'.format(datetime.datetime.now().strftime('%S'), packet_type))
+        # if packet_type == 'NAV':
+        #     self.ii = self.ii + 1
+        #     if self.ii % 1000 == 0:
+        #         print('[{0}]:{1}'.format(datetime.datetime.now().strftime('%S'), self.ii))
 
     def on_exit(self):
         self.file_loger.stop_user_log()
@@ -300,7 +306,7 @@ class FileUploader():
         self.rover_properties = utility.load_configuration(os.path.join('setting', 'rover.json'))
         if not self.rover_properties:
             os._exit(1)
-        self.host_address = self.rover_properties['userConfiguration']['hostAddress']
+        self.host_url = self.rover_properties['userConfiguration']['hostURL']
 
     def set_user_id(self, user_id):
         self.user_id = user_id
@@ -327,7 +333,7 @@ class FileUploader():
 
     def get_sas_token(self):
         try:
-            url = "http://" + self.host_address + ":3000/token/storagesas"
+            url = self.host_url + "token/storagesas"
             headers = {'Content-type': 'application/json', 'Authorization': self.db_user_access_token}
             response = requests.post(url, headers=headers)
             rev = response.json()
@@ -346,12 +352,12 @@ class FileUploader():
         text = f.read() #.decode("utf-8")
 
         try:
-            self.azure_storage('navview', self.sas_token, 'data-1000', file_name, text)
+            self.azure_storage('navview', self.sas_token, 'data', file_name, text)
         except Exception as e:
             print('azure_storage exception:', e)
             return
             # Try again!
-            # self.azure_storage('navview', self.sas_token, 'data-1000', file_name, text)
+            # self.azure_storage('navview', self.sas_token, 'data', file_name, text)
             pass
 
         ''' Trigger Database upload
@@ -383,8 +389,8 @@ class FileUploader():
         try:
             data = {"type": 'INS', "model": 'INS1000', "fileName": file_name, "url": file_name, "userId": self.user_id, 
                     "logInfo": { "pn": '11', "sn": '', "packetType":packet_type,"insProperties":json.dumps(self.rover_properties)}}
-
-            url = "http://" + self.host_address + ":3000/api/recordLogs/post"
+            
+            url = self.host_url + "api/recordLogs/post"
             data_json = json.dumps(data)
             headers = {'Content-type': 'application/json', 'Authorization': self.db_user_access_token}
             response = requests.post(url, data=data_json, headers=headers)

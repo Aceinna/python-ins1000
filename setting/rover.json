@@ -4,7 +4,7 @@
   "description": "Rover",
   "userConfiguration":
     {
-      "hostAddress": "40.118.233.18"
+      "hostURL": "https://developers.aceinna.com/ins/"
     },
   "userMessages": {
     "inputPackets": [],

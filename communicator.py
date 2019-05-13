@@ -32,6 +32,12 @@ class Communicator():
     def close(self):
         pass
 
+    def write(self,data):
+        pass
+    
+    def read(self,size):
+        pass
+
 
 class SerialPort(Communicator):
     def __init__(self):
