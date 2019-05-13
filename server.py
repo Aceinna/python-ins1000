@@ -158,35 +158,6 @@ class WSHandler(tornado.websocket.WebSocketHandler):
         self.file_loger.update(packet, packet_type, is_var_len_frame)
         self.file_loger_lock.release()
 
-class DataReceiver(rover_application_base.RoverApplicationBase):
-    def __init__(self, user=False):
-        '''Init
-        '''
-        self.file_loger = FileLoger()
-        self.file_loger.start_user_log()
-        self.ii = 0
-        pass
-
-    def on_reinit(self):
-        pass
-
-    def on_find_active_rover(self):
-        pass
-
-    def on_message(self, *args):
-        packet_type = args[0]
-        packet = args[1]
-        is_var_len_frame = args[2]
-        self.file_loger.update(packet, packet_type, is_var_len_frame)
-        # print('[{0}]:{1}'.format(datetime.datetime.now().strftime('%S'), packet_type))
-        if packet_type == 'NAV':
-            self.ii = self.ii + 1
-            if self.ii % 1000 == 0:
-                print('[{0}]:{1}'.format(datetime.datetime.now().strftime('%S'), self.ii))
-
-    def on_exit(self):
-        self.file_loger.stop_user_log()
-        pass
 
 def driver_thread(driver):
     while True:
@@ -222,7 +193,7 @@ if __name__ == '__main__':
 
     try:
         driver = driver_ins1000.RoverDriver()
-        data_receiver = DataReceiver()
+        data_receiver = RoverLogApp()
         driver.set_app(data_receiver)
         threading.Thread(target=driver_thread, args=(driver,)).start()
         threading.Thread(target=start_websocket_server, args=()).start()
