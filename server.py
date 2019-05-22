@@ -11,7 +11,7 @@ import tornado.httpserver
 import tornado.web
 import rover_application_base
 import driver_ins1000
-from file_storage import RoverLogApp, FileLoger, FileUploader
+from file_storage import RoverLogApp, FileLoger
 import utility
 
 
@@ -26,7 +26,6 @@ class WSHandler(tornado.websocket.WebSocketHandler):
         self.msgs_send2web = []
         self.data_lock = threading.Lock() # lock of all_packets and msgs_send2web.
         self.start_stream = False
-        self.file_uploader = FileUploader()
         self.file_loger = FileLoger()
         self.file_loger_lock = threading.Lock() # lock of file_loger and file_uploader.
         self.ii = 0
@@ -76,15 +75,13 @@ class WSHandler(tornado.websocket.WebSocketHandler):
         if driver.connection_status == 0:
             json_msg = json.dumps({ 'messageType' : 'queryResponse', 'data' : {'packetType' : 'DeviceStatus', 'packet' : {'returnStatus' : 1} }})
             self.write_message(json_msg)
-            # return
+            return
         try:
             message = json.loads(message)
             if message['messageType'] == 'operation' and message['data']['packetType'] == 'StartLog':
-                status = self.start_log(message['data']['packet']['fileName'])
+                status = self.start_log(message['data']['packet']['fileName'], message['data']['packet']['userID'], message['data']['packet']['accessToken'])
                 json_msg = json.dumps({'messageType':'operationResponse','data':{'packetType':'StartLog','packet':{'returnStatus':status}}})
                 self.write_message(json_msg)
-                self.file_uploader.set_user_id(message['data']['packet']['userID'])
-                self.file_uploader.set_user_access_token(message['data']['packet']['accessToken'])
             elif message['messageType'] == 'operation' and message['data']['packetType'] == 'StopLog':
                 status = self.stop_log()
                 json_msg = json.dumps({'messageType':'operationResponse','data':{'packetType':'StopLog','packet':{'returnStatus':status}}})
@@ -137,19 +134,17 @@ class WSHandler(tornado.websocket.WebSocketHandler):
         if ori_packet:
             self.update_log(ori_packet, packet_type, is_var_len_frame)
 
-    def start_log(self, file_name):
+    def start_log(self, file_name, user_id, access_token):
         self.file_loger_lock.acquire()
-        status = self.file_loger.start_user_log(file_name)
+        self.file_loger.set_user_id(user_id)
+        self.file_loger.set_user_access_token(access_token)
+        status = self.file_loger.start_user_log(file_name, True)
         self.file_loger_lock.release()
         return status
 
     def stop_log(self):
         self.file_loger_lock.acquire()
-        # invoke get_log_file_names before invoking stop_user_log as stop_user_log will remove log_file_names.
-        log_files = self.file_loger.get_log_file_names()
         status = self.file_loger.stop_user_log()
-        if status == 0:
-            self.file_uploader.upload(log_files)
         self.file_loger_lock.release()
         return status
 

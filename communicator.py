@@ -72,19 +72,8 @@ class SerialPort(Communicator):
                 A list of the serial ports available on the system
         '''
         print('scanning ports')
-        # port_list = list(serial.tools.list_ports.comports())
-        # ports = [ p.device for p in port_list]
-        if sys.platform.startswith('win'):
-            port_list = list(serial.tools.list_ports.comports())
-            ports = [ p.device for p in port_list]
-            # ports = ['COM%s' % (i + 1) for i in range(256)]
-        elif sys.platform.startswith('linux') or sys.platform.startswith('cygwin'):
-            # this excludes your current terminal "/dev/tty"
-            ports = glob.glob('/dev/tty[A-Za-z]*')
-        elif sys.platform.startswith('darwin'):
-            ports = glob.glob('/dev/tty.*')
-        else:
-            raise EnvironmentError('Unsupported platform')
+        port_list = list(serial.tools.list_ports.comports())
+        ports = [ p.device for p in port_list]
 
         result = []
         for port in ports:
@@ -228,7 +217,7 @@ class SerialPort(Communicator):
 
 
 class TCPIP(Communicator):
-    def __init__(self, host ='10.0.4.71', port=8888):#'127.0.0.1'  '192.168.31.223'
+    def __init__(self, host ='127.0.0.1', port=8888):#'127.0.0.1'  '192.168.31.223'
         Communicator.__init__(self)
         self.host = host
         self.port = port
