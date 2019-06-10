@@ -49,19 +49,34 @@ class FileLoger():
         '''Initialize and create a CSV file
         '''
         start_time = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-        rover_properties = utility.load_configuration(os.path.join('setting', 'rover.json'))
-        if not rover_properties:
+        self.rover_properties = utility.load_configuration(os.path.join('setting', 'rover.json'))
+        if not self.rover_properties:
             os._exit(1)
         if not os.path.exists('data/'):
             os.mkdir('data/')
-        self.output_packets = rover_properties['userMessages']['outputPackets']
+        self.output_packets = self.rover_properties['userMessages']['outputPackets']
         self.log_file_rows = {}
         self.log_file_names = {}
+        self.log_files_obj = {}
         self.log_files = {}
         self.user_file_name = '' # the prefix of log file name.
         self.msgs_need_to_log = []
+        self.ws = False
+        # azure app.
+        self.user_id = ''
+        self.file_name = ''
+        self.sas_token = '' 
+        self.db_user_access_token = ''
+        self.host_url = self.rover_properties['userConfiguration']['hostURL']
 
-    def start_user_log(self, file_name=''):
+        #
+        self.threads = []  # thread of receiver and paser
+        self.exit_thread = False  # flag of exit threads
+        self.exit_lock = threading.Lock()  # lock of exit_thread
+        self.data_dict = {}  # data container
+        self.data_lock = threading.Lock()  # lock of data_queue
+
+    def start_user_log(self, file_name='', ws=False):
         '''
         start log.
         return:
@@ -73,6 +88,8 @@ class FileLoger():
             if len(self.log_file_rows) > 0:
                 return 1 # has started logging already.
 
+            self.ws = ws
+            self.exit_thread = False
             self.user_file_name = file_name
             start_time = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
             for packet in self.output_packets:
@@ -83,7 +100,15 @@ class FileLoger():
                         self.log_file_names[packet['name']] = packet['name'] +'-' + start_time + '.csv'
                     else:
                         self.log_file_names[packet['name']] = self.user_file_name + '_' + packet['name'] +'-' + start_time + '.csv'
-                    self.log_files[packet['name']] = open('data/' + self.log_file_names[packet['name']], 'w')        
+                    self.log_files[packet['name']] = self.log_file_names[packet['name']]
+                    self.log_files_obj[packet['name']] = open('data/' + self.log_file_names[packet['name']], 'w')    
+
+            if self.ws:
+                self.get_sas_token()
+                self.data_dict.clear()
+                for i, (k, v) in enumerate(self.log_files.items()): # k:pack type  v:log file name
+                    self.data_dict[v]=''
+                    threading.Thread(target=self.upload_azure, args=(k,v)).start()
             return 0
         except Exception as e:
             print('Exception! File:[{0}], Line:[{1}]. Exception:{2}'.format(__file__, sys._getframe().f_lineno, e))
@@ -97,18 +122,117 @@ class FileLoger():
                 1: exception that driver hasn't started logging files yet.
                 2: other exception.
         '''
+        rev = 0
         try:
             if len(self.log_file_rows) == 0:
                 return 1 # driver hasn't started logging files yet.
-            for i, (k, v) in enumerate(self.log_files.items()):
+            for i, (k, v) in enumerate(self.log_files_obj.items()):
                 v.close()
             self.log_file_rows.clear()
             self.log_file_names.clear()
-            self.log_files.clear()
-            return 0
+            self.log_files_obj.clear()
+            rev = 0
         except Exception as e:
             print(e)
-            return 2
+            rev = 2
+
+        if self.ws:
+            time.sleep(1)
+            self.exit_lock.acquire()
+            self.exit_thread = True
+            self.exit_lock.release()
+            self.ws = False
+            
+        return rev
+
+    # def upload_callback(self, current, total):
+    #     print('({}, {})'.format(current, total))
+
+    def upload_azure(self, packet_type, log_file_name):
+        if self.db_user_access_token == '' or self.sas_token == '':
+            print("Error: Can not upload log to azure since token is empty! Please check the network.")
+            
+        print(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S:'), log_file_name, ' start.')
+
+        accountName = 'navview'
+        countainerName = 'data-1000'
+        fileName = log_file_name
+        bcreate_blob_ok = False
+
+        error_connection = 'ConnectionError'
+        error_authorization = 'AuthenticationFailed'
+        ii=0
+        while True:
+            # get data from data_dict.
+            self.data_lock.acquire()
+            text = self.data_dict[log_file_name]
+            self.data_dict[log_file_name] = ''
+            self.data_lock.release()
+
+            # check if user stop logging data.
+            self.exit_lock.acquire()
+            if self.exit_thread:
+                # check for internet and text
+                if text == '' or (not self.internet_on()):
+                    self.exit_lock.release()
+                    break
+                else:
+                    pass
+            self.exit_lock.release()
+
+            #let CPU have a break.
+            if text == '' : 
+                time.sleep(1)
+                continue
+
+            #create blob on azure
+            if not bcreate_blob_ok:
+                try:
+                    self.append_blob_service = AppendBlobService(account_name=accountName,
+                                                                sas_token=self.sas_token,
+                                                                protocol='http')
+                    self.append_blob_service.create_blob(container_name=countainerName, blob_name=fileName,
+                                                        content_settings=ContentSettings(content_type='text/plain'))
+                    bcreate_blob_ok = True
+                    threading.Thread(target=self.save_to_db_task, args=(packet_type, log_file_name)).start()
+                except Exception as e:
+                    # print('Exception when create_blob:', type(e), e)
+                    if error_connection in str(e):
+                        pass
+                    elif error_authorization in str(e):
+                        self.get_sas_token()
+                        self.append_blob_service = AppendBlobService(account_name=accountName,
+                                                                    sas_token=self.sas_token,
+                                                                    protocol='http')
+                    print('Retry to create_blob again...')
+                    continue
+
+            # append blob on azure
+            try:
+                # self.append_blob_service.append_blob_from_text(countainerName, fileName, text, progress_callback=self.upload_callback)
+                self.append_blob_service.append_blob_from_text(countainerName, fileName, text)
+            except Exception as e:
+                # print('Exception when append_blob:', type(e), e)
+                if error_connection in str(e):
+                    pass
+                elif error_authorization in str(e):
+                    self.get_sas_token()
+                    self.append_blob_service = AppendBlobService(account_name=accountName,
+                                                                sas_token=self.sas_token,
+                                                                protocol='http')
+                    # if append blob failed, do not drop 'text', but push 'text' to data_dict and re-append next time.
+                    self.data_lock.acquire()
+                    self.data_dict[log_file_name] = text + self.data_dict[log_file_name]
+                    self.data_lock.release()
+
+        if bcreate_blob_ok:
+            # if not self.save_to_ans_platform(packet_type, log_file_name):
+            #     print('save_to_ans_platform failed.')
+            print(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S:') , log_file_name, ' done.')
+
+    def save_to_db_task(self, packet_type, file_name):
+        if not self.save_to_ans_platform(packet_type, file_name):
+            print('save_to_ans_platform failed.')
 
     def update(self, packet, packet_type, is_var_len_frame):
         if len(self.log_file_rows) == 0: #if hasn't started logging.
@@ -170,9 +294,9 @@ class FileLoger():
                 str += '{0:d},'.format(v)
             elif outputPcktType == 'double':
                 # double
-                str += '{0:15.8f},'.format(v)# 15.12
+                str += '{0:0.8f},'.format(v)# 15.12
             elif outputPcktType == 'float':
-                str += '{0:12.4f},'.format(v) # 12.8
+                str += '{0:0.4f},'.format(v) # 12.8
             elif outputPcktType == 'uint8':
                 # byte
                 str += '{0:d},'.format(v)
@@ -183,14 +307,15 @@ class FileLoger():
                 # unknown
                 str += '{0:3.5f},'.format(v)
         # 
-        str = str[:-1]
-        str = str + '\n'
+        str = header + str[:-1] + '\n'
 
-        if self.log_file_rows[packet_type] == 1:
-            self.log_files[packet_type].write(header+str)
-        else:
-            self.log_files[packet_type].write(str)
-        self.log_files[packet_type].flush()
+        self.log_files_obj[packet_type].write(str)
+        self.log_files_obj[packet_type].flush()
+
+        if self.ws:
+            self.data_lock.acquire()
+            self.data_dict[self.log_files[packet_type]] = self.data_dict[self.log_files[packet_type]] + str
+            self.data_lock.release()
 
     def log_var_len(self, data, packet_type):
         ''' Parse the data, read in from the unit, and generate a data file using
@@ -246,9 +371,9 @@ class FileLoger():
                         const_str += '{0:d},'.format(v)
                     elif outputPcktType == 'double':
                         # double
-                        const_str += '{0:15.12f},'.format(v) # 15.12
+                        const_str += '{0:0.12f},'.format(v) # 15.12
                     elif outputPcktType == 'float':
-                        const_str += '{0:12.4f},'.format(v) # 12.8
+                        const_str += '{0:0.4f},'.format(v) # 12.8
                     elif outputPcktType == 'uint8':
                         # byte
                         const_str += '{0:d},'.format(v)
@@ -282,31 +407,19 @@ class FileLoger():
                         var_str += '{0:3.5f},'.format(v)
 
                 str = const_str + var_str
-                str = str[:-1]
-                str = str + '\n'
-                    
-                if self.log_file_rows[packet_type] == 1:
-                    self.log_files[packet_type].write(header+str)
-                else:
-                    self.log_files[packet_type].write(str)
-                self.log_files[packet_type].flush()
+                str = header + str[:-1] + '\n'
+
+                self.log_files_obj[packet_type].write(str)
+                self.log_files_obj[packet_type].flush()
+
+                if self.ws:
+                    self.data_lock.acquire()
+                    self.data_dict[self.log_files[packet_type]] = self.data_dict[self.log_files[packet_type]] + str
+                    self.data_lock.release()
 
                 header = ''
                 str = ''
                 var_str = ''
-                
-
-class FileUploader():
-    def __init__(self):
-        # azure app.
-        self.user_id = ''
-        self.file_name = ''
-        self.sas_token = '' 
-        self.db_user_access_token = ''
-        self.rover_properties = utility.load_configuration(os.path.join('setting', 'rover.json'))
-        if not self.rover_properties:
-            os._exit(1)
-        self.host_url = self.rover_properties['userConfiguration']['hostURL']
 
     def set_user_id(self, user_id):
         self.user_id = user_id
@@ -389,7 +502,7 @@ class FileUploader():
         try:
             data = {"type": 'INS', "model": 'INS1000', "fileName": file_name, "url": file_name, "userId": self.user_id, 
                     "logInfo": { "pn": '11', "sn": '', "packetType":packet_type,"insProperties":json.dumps(self.rover_properties)}}
-            
+
             url = self.host_url + "api/recordLogs/post"
             data_json = json.dumps(data)
             headers = {'Content-type': 'application/json', 'Authorization': self.db_user_access_token}
@@ -397,6 +510,21 @@ class FileUploader():
             return True if 'success' in response.json() else False
         except Exception as e:
             print('Exception when update db:', e)
+
+    def internet_on(self):
+        try:
+            url = 'https://navview.blob.core.windows.net/'
+            if sys.version_info[0] > 2:
+                import urllib.request
+                response = urllib.request.urlopen(url, timeout=1)
+            else:
+                import urllib2
+                response = urllib2.urlopen(url, timeout=1)
+            # print(response.read())
+            return True
+        except urllib2.URLError as err: 
+            return False
+
 
 def main():
     '''main'''
@@ -418,3 +546,4 @@ def main():
 if __name__ == '__main__':
     main()
     # os._exit(1)
+    
