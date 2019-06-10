@@ -184,7 +184,7 @@ def start_websocket_server():
 
 if __name__ == '__main__':
     '''main'''
-    callback_rate = 1000
+    callback_rate = 200
 
     try:
         driver = driver_ins1000.RoverDriver()

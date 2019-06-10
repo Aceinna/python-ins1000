@@ -14,6 +14,10 @@ Python driver for INS1000 RTK System
 
 ## Steps
 
+### Register in ANS
+Open [Aceinna Navigation Studio (ANS)](https://developers.aceinna.com/) and registers a new user.
+I highly recommend you to use Chrome.
+
 ### pip install
 - pyserial
 - tornado
@@ -22,18 +26,21 @@ Python driver for INS1000 RTK System
 - asyncio (If python3)
 
 ### Run
-Run server.py to run as a webserver for Aceinna Navigation Studio (ANS) web app
+Download the source code of branch Master, then run server.py
 ```
 python server.py
 ```
 
-### Trajectory and Maps
-Open [maps/trajectory webpage](https://developers.aceinna.com/maps) and check trajectory and maps
+Open [ANS](https://developers.aceinna.com/ins), then user can:
+- Check the navigation infomation on web GUI
+- Log files
 
 ![maps](/img/maps.png)
 ![trajectory](/img/trajectory.png)
 
-### sky-view
-Open [sky-view webpage](https://developers.aceinna.com/skyview) and check sky-view info
-
+Below is the sky-view of satellites:
 ![skyview](/img/skyview.png)
+
+The log file can be opened by excel as below:
+![log_data](/img/log_data.png)
+
