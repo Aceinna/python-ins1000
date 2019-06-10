@@ -4,8 +4,8 @@
   "description": "Rover",
   "userConfiguration":
     {
-      "hostURL": "http://40.118.233.18:3000/",
-      "hostURL_": "https://api.aceinna.com/"
+      "hostURL": "https://api.aceinna.com/",
+      "hostURL_test": "http://40.118.233.18:3000/"
     },
   "userMessages": {
     "inputPackets": [],
