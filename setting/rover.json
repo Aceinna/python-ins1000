@@ -292,32 +292,32 @@
           },
           {
             "type": "float",
-            "name": "Accel in body frame-X",
+            "name": "Accel_X",
             "unit": "m/s^2"
           },
           {
             "type": "float",
-            "name": "Accel in body frame-Y",
+            "name": "Accel_Y",
             "unit": "m/s^2"
           },
           {
             "type": "float",
-            "name": "Accel in body frame-Z",
+            "name": "Accel_Z",
             "unit": "m/s^2"
           },
           {
             "type": "float",
-            "name": "Gyro in body frame-X",
+            "name": "Gyro_X",
             "unit": "deg/s"
           },
           {
             "type": "float",
-            "name": "Gyro in body frame-Y",
+            "name": "Gyro_Y",
             "unit": "deg/s"
           },
           {
             "type": "float",
-            "name": "Gyro in body frame-Z",
+            "name": "Gyro_Z",
             "unit": "deg/s"
           },
           {

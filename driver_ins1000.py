@@ -721,6 +721,12 @@ class RoverDriver:
             nav['Pitch'] = euler_angle[1]*r2d
             nav['Heading'] = euler_angle[2]*r2d
             nav['Attitude RMS'] = math.sqrt(math.pow(att_rms_n,2)+math.pow(att_rms_e,2)+math.pow(att_rms_d,2))
+            # nav['Accel_X'] = self.msgs[TP_CNM]['Accel_X']
+            # nav['Accel_Y'] = self.msgs[TP_CNM]['Accel_Y']
+            # nav['Accel_Z'] = self.msgs[TP_CNM]['Accel_Z']
+            # nav['Gyro_X'] = self.msgs[TP_CNM]['Gyro_X']
+            # nav['Gyro_Y'] = self.msgs[TP_CNM]['Gyro_Y']
+            # nav['Gyro_Z'] = self.msgs[TP_CNM]['Gyro_Z']
 
             if self.app:
                 self.app.on_message(TP_NAV, nav, False)
@@ -937,4 +943,20 @@ if __name__ == '__main__':
     # message = json.loads(message)
     # driver.handle_cmd_msg(message)
 
+    # q1 = -0.5
+    # q2 = 0.5
+    # q3 = -0.5
+    # q0 =  0.5
+
+    # q1 = -0.70273009734
+    # q2 =   0.00893300885635
+    # q3 =  0.00879596402535
+    # q0 =  0.711346077983
+
+    # r2d = 180/math.pi
+    # (roll, pitch, heading) = utility.cal_attitude(q0, q1, q2, q3)
+    # roll = roll*r2d
+    # pitch = pitch*r2d
+    # heading = heading*r2d
+    
     pass
