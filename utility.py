@@ -34,6 +34,12 @@ def check_sum(data):
     return checksum_a, checksum_b
 
 def cal_attitude(q0, q1, q2, q3):
+    '''
+    (q0, q1, q2, q3) are (Scalar, X, Y, Z) respective.
+    Note that the quaternion in ROS is defined as (X, Y, Z, scalar). 
+
+    return: (roll, pitch, heading), unit: radians
+    '''
     q0_2 = q0 * q0
     q1_2 = q1 * q1
     q2_2 = q2 * q2
