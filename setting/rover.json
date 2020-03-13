@@ -232,7 +232,7 @@
         "name": "CNM",
         "header": "AF20050D",
         "description": "Compact Navigation Message (High Rate)",
-        "save2file": 0,
+        "save2file": 1,
         "send2web": 0,
         "payload": [
           {
