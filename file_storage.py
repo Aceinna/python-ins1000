@@ -253,7 +253,8 @@ class FileLoger():
             of the data in the resulting data file.
         '''
         output_packet = next((x for x in self.output_packets if x['name'] == packet_type), None)
-
+        str_local_time = "local_time (s)"
+        local_time = time.time()
         '''Write row of CSV file based on data received.  Uses dictionary keys for column titles
         '''
         if self.log_file_rows[packet_type] == 0:
@@ -275,7 +276,7 @@ class FileLoger():
 
             # Remove the comma at the end of the string and append a new-line character
             labels = labels[:-1]
-            header = labels + '\n'
+            header = str_local_time + ',' + labels + '\n'
         else:
             header = ''
 
@@ -284,6 +285,7 @@ class FileLoger():
         # Loop through the items in the data dictionary and append to an output string
         #   (with precision based on the data type defined in the json properties file)
         str = ''
+        str += '{0:f},'.format(local_time)
         for i, (k, v) in enumerate(data.items()):
             outputPcktType = output_packet['payload'][i]['type']
 
