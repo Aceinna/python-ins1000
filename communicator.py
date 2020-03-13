@@ -317,3 +317,49 @@ class TCPIP(Communicator):
         if self.sock:
             self.sock.close()
             self.sock = None
+
+class DataFile(Communicator):
+    def __init__(self, file_name):
+        Communicator.__init__(self)
+        self.file_name = file_name
+        self.file = None
+        self.read_size = 1024
+        pass
+
+    def find_device(self):
+        return False
+
+    def write(self,data):
+        '''
+        '''
+        pass
+    
+    def read(self,size):
+        '''
+        read size bytes via TCPIP. 
+        parameters: size – number of bytes to read.
+        returns: bytes read from the port.
+        return type: bytes
+        '''
+        try:
+            data = self.file.read(size)
+            return data
+            # if(len(data) != 0):
+            #     return data
+            # else: # notice 'receiver' thread to exit.
+            #     raise Exception("Finish reading data file.")
+        except Exception as e:
+            print(e)
+            raise
+
+    def open(self):
+        try:
+            self.file = open(self.file_name, 'rb')
+            return True
+        except Exception as e:
+            print(e)
+
+    def close(self):
+        if self.file:
+            self.file.close()
+            self.file = None
